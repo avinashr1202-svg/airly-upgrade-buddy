@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { FileList } from "@/components/FileList";
 import type { FileTab } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
-import { FileDetailModal } from "@/components/FileDetailModal";
+import { CodeDiffViewer } from "@/components/CodeDiffViewer";
 
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -26,7 +26,6 @@ const createFile = (name: string, code: string): FileEntry => ({
 const Index = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<"migration" | "testing" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<FileTab>("deployed");
@@ -65,7 +64,6 @@ const Index = () => {
     const file = files.find((f) => f.id === id);
     if (file && file.stage !== "deployed") {
       setSelectedFileId(id);
-      setModalOpen(true);
     }
   }, [files]);
 
@@ -237,11 +235,13 @@ const Index = () => {
           />
         </div>
 
-        {/* Center: Drop zone / status */}
-        <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-          {files.length === 0 ? (
+        {/* Right: Diff viewer or status */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {selectedFile && selectedFile.stage !== "deployed" ? (
+            <CodeDiffViewer file={selectedFile} />
+          ) : files.length === 0 ? (
             <div
-              className="flex flex-col items-center gap-4 text-muted-foreground p-8 border-2 border-dashed border-border rounded-xl max-w-md mx-auto cursor-pointer hover:border-primary/50 transition-colors"
+              className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-8 cursor-pointer"
               onClick={() => {
                 const input = document.createElement("input");
                 input.type = "file";
@@ -260,14 +260,14 @@ const Index = () => {
                 if (droppedFiles.length) handleUploadFiles(droppedFiles);
               }}
             >
-              <Upload className="w-12 h-12 text-primary/50" />
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">Drop .py files here or click to upload</p>
-                <p className="text-xs text-muted-foreground mt-1">Upload your Airflow 2.x DAG files to deploy to the utility</p>
+              <div className="border-2 border-dashed border-border rounded-xl p-8 max-w-md hover:border-primary/50 transition-colors">
+                <Upload className="w-12 h-12 text-primary/50 mx-auto mb-4" />
+                <p className="text-sm font-medium text-foreground text-center">Drop .py files here or click to upload</p>
+                <p className="text-xs text-muted-foreground mt-1 text-center">Upload your Airflow 2.x DAG files to deploy to the utility</p>
               </div>
             </div>
           ) : (
-            <div className="text-center text-muted-foreground space-y-2">
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground space-y-2">
               <p className="text-sm">
                 {files.every((f) => f.stage === "ready_for_download")
                   ? "✅ All files ready for download!"
@@ -279,7 +279,7 @@ const Index = () => {
                   ? "📋 Select migrated files to test, then click 'Test'."
                   : anyProcessing
                   ? "⏳ Processing..."
-                  : "Files deployed. Use 'Select & Migrate' to choose files for migration."}
+                  : "Click a migrated file to view the side-by-side diff."}
               </p>
               <p className="text-xs">
                 {files.filter((f) => f.stage === "deployed").length} deployed ·{" "}
@@ -291,12 +291,6 @@ const Index = () => {
           )}
         </div>
       </div>
-
-      <FileDetailModal
-        file={selectedFile}
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-      />
     </div>
   );
 };
