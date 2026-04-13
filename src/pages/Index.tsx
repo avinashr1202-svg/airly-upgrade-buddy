@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { FileList } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
 import { FileDetailModal } from "@/components/FileDetailModal";
-import { CustomRulesPanel } from "@/components/CustomRulesPanel";
+
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { FileEntry, PipelineStage } from "@/types/pipeline";
@@ -281,11 +281,6 @@ const Index = () => {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Right: Rules panel */}
-        <div className="w-80 border-l border-border flex flex-col shrink-0">
-          <CustomRulesPanel />
         </div>
       </div>
 
