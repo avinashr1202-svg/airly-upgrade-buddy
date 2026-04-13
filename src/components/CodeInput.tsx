@@ -69,9 +69,10 @@ interface CodeInputProps {
   code: string;
   setCode: (code: string) => void;
   isLoading: boolean;
+  onUploadFiles?: (files: File[]) => void;
 }
 
-export function CodeInput({ code, setCode, isLoading }: CodeInputProps) {
+export function CodeInput({ code, setCode, isLoading, onUploadFiles }: CodeInputProps) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleFileUpload = (file: File) => {
@@ -85,9 +86,11 @@ export function CodeInput({ code, setCode, isLoading }: CodeInputProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith(".py")) {
-      handleFileUpload(file);
+    const droppedFiles = Array.from(e.dataTransfer.files).filter((f) => f.name.endsWith(".py"));
+    if (droppedFiles.length > 1 && onUploadFiles) {
+      onUploadFiles(droppedFiles);
+    } else if (droppedFiles.length === 1) {
+      handleFileUpload(droppedFiles[0]);
     }
   };
 
