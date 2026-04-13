@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      custom_rules: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          from_pattern: string
+          id: string
+          to_pattern: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          from_pattern: string
+          id?: string
+          to_pattern: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          from_pattern?: string
+          id?: string
+          to_pattern?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
