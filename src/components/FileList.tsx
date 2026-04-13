@@ -12,6 +12,7 @@ interface FileListProps {
   onRemoveFile: (id: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  onSelectAll: () => void;
   selectionMode: "migration" | "testing" | null;
 }
 
@@ -36,7 +37,7 @@ function isSelectable(stage: FileEntry["stage"], mode: "migration" | "testing" |
   return false;
 }
 
-export function FileList({ files, onUploadFiles, onSelectFile, onRemoveFile, selectedIds, onToggleSelect, selectionMode }: FileListProps) {
+export function FileList({ files, onUploadFiles, onSelectFile, onRemoveFile, selectedIds, onToggleSelect, onSelectAll, selectionMode }: FileListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -68,8 +69,14 @@ export function FileList({ files, onUploadFiles, onSelectFile, onRemoveFile, sel
       </div>
 
       {selectionMode && (
-        <div className="px-4 py-2 bg-primary/10 border-b border-border text-xs text-primary font-medium">
-          Select files to {selectionMode === "migration" ? "migrate" : "test"}
+        <div className="px-4 py-2 bg-primary/10 border-b border-border text-xs text-primary font-medium flex items-center justify-between">
+          <span>Select files to {selectionMode === "migration" ? "migrate" : "test"}</span>
+          <button
+            onClick={onSelectAll}
+            className="underline hover:text-primary/80 transition-colors"
+          >
+            Select All
+          </button>
         </div>
       )}
 
