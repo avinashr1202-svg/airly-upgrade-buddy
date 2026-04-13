@@ -41,6 +41,126 @@ export type Database = {
         }
         Relationships: []
       }
+      dag_collected_errors: {
+        Row: {
+          collected_at: string
+          dag_name: string
+          error_message: string
+          execution_date: string | null
+          fix_steps: string | null
+          id: string
+          run_id: string | null
+          severity: string
+          short_description: string | null
+          task_id: string | null
+          template_id: string
+        }
+        Insert: {
+          collected_at?: string
+          dag_name: string
+          error_message: string
+          execution_date?: string | null
+          fix_steps?: string | null
+          id?: string
+          run_id?: string | null
+          severity?: string
+          short_description?: string | null
+          task_id?: string | null
+          template_id: string
+        }
+        Update: {
+          collected_at?: string
+          dag_name?: string
+          error_message?: string
+          execution_date?: string | null
+          fix_steps?: string | null
+          id?: string
+          run_id?: string | null
+          severity?: string
+          short_description?: string | null
+          task_id?: string | null
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dag_collected_errors_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "dag_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dag_collected_errors_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "dag_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dag_monitor_results: {
+        Row: {
+          collected_at: string
+          dag_name: string
+          duration_seconds: number | null
+          error_details: string | null
+          fix_steps: string | null
+          id: string
+          is_smoke_tested: boolean
+          last_run_at: string | null
+          log_info: string | null
+          paths_covered: string | null
+          run_id: string | null
+          status: string
+          template_id: string
+        }
+        Insert: {
+          collected_at?: string
+          dag_name: string
+          duration_seconds?: number | null
+          error_details?: string | null
+          fix_steps?: string | null
+          id?: string
+          is_smoke_tested?: boolean
+          last_run_at?: string | null
+          log_info?: string | null
+          paths_covered?: string | null
+          run_id?: string | null
+          status?: string
+          template_id: string
+        }
+        Update: {
+          collected_at?: string
+          dag_name?: string
+          duration_seconds?: number | null
+          error_details?: string | null
+          fix_steps?: string | null
+          id?: string
+          is_smoke_tested?: boolean
+          last_run_at?: string | null
+          log_info?: string | null
+          paths_covered?: string | null
+          run_id?: string | null
+          status?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dag_monitor_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "dag_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dag_monitor_results_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "dag_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dag_runs: {
         Row: {
           completed_at: string | null
