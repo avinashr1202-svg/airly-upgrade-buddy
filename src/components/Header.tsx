@@ -1,4 +1,4 @@
-import { Plane, Zap, BookOpen, Activity } from "lucide-react";
+import { Plane, Zap, BookOpen, Activity, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -42,6 +42,16 @@ export function Header() {
           >
             <Activity className="w-3.5 h-3.5" />
             DAGs
+          </Link>
+          <Link
+            to="/settings"
+            className={cn(
+              "px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
+              location.pathname === "/settings" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Settings
           </Link>
         </nav>
       </div>
