@@ -26,7 +26,6 @@ const createFile = (name: string, code: string): FileEntry => ({
 const Index = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<"migration" | "testing" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<FileTab>("deployed");
