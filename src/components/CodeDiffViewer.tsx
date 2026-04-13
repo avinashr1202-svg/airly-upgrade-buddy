@@ -1,54 +1,92 @@
-import { useRef, useCallback, useMemo } from "react";
+import { useRef, useCallback, useMemo, useState } from "react";
 import { Copy, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
 import type { FileEntry, Change } from "@/types/pipeline";
 
 interface CodeDiffViewerProps {
   file: FileEntry;
 }
 
-interface DiffLine {
-  lineNum: number;
-  oldLine: string;
-  newLine: string;
+interface AlignedRow {
+  oldLineNum: number | null;
+  newLineNum: number | null;
+  oldText: string;
+  newText: string;
   type: "unchanged" | "modified" | "added" | "removed";
 }
 
-function computeDiffLines(oldCode: string, newCode: string, changes: Change[]): DiffLine[] {
+/**
+ * LCS-based diff: computes the longest common subsequence of lines,
+ * then builds aligned rows with blank placeholders for adds/removes.
+ */
+function computeAlignedDiff(oldCode: string, newCode: string): AlignedRow[] {
   const oldLines = oldCode.split("\n");
   const newLines = newCode.split("\n");
-  const maxLen = Math.max(oldLines.length, newLines.length);
+  const m = oldLines.length;
+  const n = newLines.length;
 
-  // Build a set of changed line numbers for quick lookup
-  const changedLineNums = new Set<number>();
-  changes?.forEach((c) => {
-    const num = parseInt(c.line, 10);
-    if (!isNaN(num)) changedLineNums.add(num);
-  });
-
-  const result: DiffLine[] = [];
-  for (let i = 0; i < maxLen; i++) {
-    const oldLine = i < oldLines.length ? oldLines[i] : "";
-    const newLine = i < newLines.length ? newLines[i] : "";
-    const lineNum = i + 1;
-
-    let type: DiffLine["type"] = "unchanged";
-    if (changedLineNums.has(lineNum)) {
-      type = "modified";
-    } else if (i >= oldLines.length) {
-      type = "added";
-    } else if (i >= newLines.length) {
-      type = "removed";
-    } else if (oldLine !== newLine) {
-      type = "modified";
+  // Build LCS table
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
     }
-
-    result.push({ lineNum, oldLine, newLine, type });
   }
-  return result;
+
+  // Backtrack to build aligned rows
+  const rows: AlignedRow[] = [];
+  let i = m, j = n;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      rows.push({
+        oldLineNum: i,
+        newLineNum: j,
+        oldText: oldLines[i - 1],
+        newText: newLines[j - 1],
+        type: "unchanged",
+      });
+      i--;
+      j--;
+    } else if (i > 0 && j > 0 && dp[i - 1][j - 1] >= dp[i - 1][j] && dp[i - 1][j - 1] >= dp[i][j - 1]) {
+      // Modified line — both sides consumed
+      rows.push({
+        oldLineNum: i,
+        newLineNum: j,
+        oldText: oldLines[i - 1],
+        newText: newLines[j - 1],
+        type: "modified",
+      });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      rows.push({
+        oldLineNum: null,
+        newLineNum: j,
+        oldText: "",
+        newText: newLines[j - 1],
+        type: "added",
+      });
+      j--;
+    } else {
+      rows.push({
+        oldLineNum: i,
+        newLineNum: null,
+        oldText: oldLines[i - 1],
+        newText: "",
+        type: "removed",
+      });
+      i--;
+    }
+  }
+
+  return rows.reverse();
 }
 
 export function CodeDiffViewer({ file }: CodeDiffViewerProps) {
@@ -63,9 +101,9 @@ export function CodeDiffViewer({ file }: CodeDiffViewerProps) {
     ...(file.deployResult?.changes || []),
   ];
 
-  const diffLines = useMemo(
-    () => computeDiffLines(file.inputCode, finalCode, allChanges),
-    [file.inputCode, finalCode, allChanges]
+  const alignedRows = useMemo(
+    () => computeAlignedDiff(file.inputCode, finalCode),
+    [file.inputCode, finalCode]
   );
 
   const handleScroll = useCallback((source: "left" | "right") => {
@@ -98,14 +136,14 @@ export function CodeDiffViewer({ file }: CodeDiffViewerProps) {
     URL.revokeObjectURL(url);
   };
 
-  const bgClass = (type: DiffLine["type"], side: "old" | "new") => {
+  const rowBg = (type: AlignedRow["type"], side: "old" | "new") => {
     if (type === "modified") return side === "old" ? "bg-destructive/10" : "bg-success/10";
-    if (type === "added") return side === "new" ? "bg-success/10" : "";
-    if (type === "removed") return side === "old" ? "bg-destructive/10" : "";
+    if (type === "added") return side === "new" ? "bg-success/10" : "bg-muted/20";
+    if (type === "removed") return side === "old" ? "bg-destructive/10" : "bg-muted/20";
     return "";
   };
 
-  const textClass = (type: DiffLine["type"], side: "old" | "new") => {
+  const rowText = (type: AlignedRow["type"], side: "old" | "new") => {
     if (type === "modified") return side === "old" ? "text-destructive" : "text-success";
     if (type === "added" && side === "new") return "text-success";
     if (type === "removed" && side === "old") return "text-destructive";
@@ -146,13 +184,13 @@ export function CodeDiffViewer({ file }: CodeDiffViewerProps) {
               onScroll={() => handleScroll("left")}
               className="flex-1 overflow-auto scrollbar-thin font-mono text-xs leading-5"
             >
-              {diffLines.map((line) => (
-                <div key={`old-${line.lineNum}`} className={`flex min-h-[20px] ${bgClass(line.type, "old")}`}>
+              {alignedRows.map((row, idx) => (
+                <div key={`old-${idx}`} className={`flex min-h-[20px] ${rowBg(row.type, "old")}`}>
                   <span className="w-10 shrink-0 text-right pr-2 text-muted-foreground/50 select-none text-[10px] leading-5 border-r border-border/50">
-                    {line.type !== "added" ? line.lineNum : ""}
+                    {row.oldLineNum ?? ""}
                   </span>
-                  <pre className={`flex-1 pl-3 pr-2 whitespace-pre ${textClass(line.type, "old")}`}>
-                    {line.type === "removed" ? `- ${line.oldLine}` : line.oldLine}
+                  <pre className={`flex-1 pl-3 pr-2 whitespace-pre ${row.oldLineNum ? rowText(row.type, "old") : "text-transparent select-none"}`}>
+                    {row.oldLineNum ? row.oldText : "\u00A0"}
                   </pre>
                 </div>
               ))}
@@ -179,13 +217,13 @@ export function CodeDiffViewer({ file }: CodeDiffViewerProps) {
               onScroll={() => handleScroll("right")}
               className="flex-1 overflow-auto scrollbar-thin font-mono text-xs leading-5"
             >
-              {diffLines.map((line) => (
-                <div key={`new-${line.lineNum}`} className={`flex min-h-[20px] ${bgClass(line.type, "new")}`}>
+              {alignedRows.map((row, idx) => (
+                <div key={`new-${idx}`} className={`flex min-h-[20px] ${rowBg(row.type, "new")}`}>
                   <span className="w-10 shrink-0 text-right pr-2 text-muted-foreground/50 select-none text-[10px] leading-5 border-r border-border/50">
-                    {line.type !== "removed" ? line.lineNum : ""}
+                    {row.newLineNum ?? ""}
                   </span>
-                  <pre className={`flex-1 pl-3 pr-2 whitespace-pre ${textClass(line.type, "new")}`}>
-                    {line.type === "added" ? `+ ${line.newLine}` : line.newLine}
+                  <pre className={`flex-1 pl-3 pr-2 whitespace-pre ${row.newLineNum ? rowText(row.type, "new") : "text-transparent select-none"}`}>
+                    {row.newLineNum ? row.newText : "\u00A0"}
                   </pre>
                 </div>
               ))}
