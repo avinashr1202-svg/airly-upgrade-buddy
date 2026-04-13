@@ -43,6 +43,65 @@ Respond with valid JSON only. No markdown fences, no preamble:
   "warnings": ["any warnings about things that need manual review"]
 }`;
 
+async function callLovableAI(userPrompt: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("AI service not configured");
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("Rate limit exceeded. Please try again in a moment.");
+    if (response.status === 402) throw new Error("AI credits exhausted. Please add funds in Settings → Workspace → Usage.");
+    throw new Error("AI service error");
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callAnthropicAPI(userPrompt: string, apiKey: string, endpoint: string): Promise<string> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8192,
+      system: SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const t = await response.text();
+    console.error("Anthropic API error:", response.status, t);
+    if (response.status === 429) throw new Error("Rate limit exceeded. Please try again in a moment.");
+    throw new Error("Claude API error");
+  }
+
+  const data = await response.json();
+  return data.content?.[0]?.text || "";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -58,57 +117,22 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const userPrompt = mode === "analyze"
       ? `Analyze this Airflow 2.x DAG and list all migration issues WITHOUT providing fixed code. Set fixed_code to empty string.\n\n${code}`
       : `Migrate this Airflow 2.x DAG to Airflow 3.x:\n\n${code}`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        stream: false,
-      }),
-    });
+    // Use Anthropic Claude if API key is configured, otherwise fall back to Lovable AI
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const ANTHROPIC_ENDPOINT = Deno.env.get("ANTHROPIC_ENDPOINT") || "https://api.anthropic.com/v1/messages";
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings → Workspace → Usage." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(
-        JSON.stringify({ error: "AI service error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let content: string;
+    if (ANTHROPIC_API_KEY) {
+      console.log("Using Anthropic Claude API");
+      content = await callAnthropicAPI(userPrompt, ANTHROPIC_API_KEY, ANTHROPIC_ENDPOINT);
+    } else {
+      console.log("Using Lovable AI Gateway (default)");
+      content = await callLovableAI(userPrompt);
     }
-
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || "";
 
     // Strip markdown fences if present
     if (content.startsWith("```")) {
