@@ -25,7 +25,7 @@ export function PipelineControls({
 }: PipelineControlsProps) {
   const hasDeployed = files.some((f) => f.stage === "deployed");
   const hasMigrated = files.some((f) => f.stage === "migration_done");
-  const allCompleted = files.length > 0 && files.every((f) => f.stage === "completed");
+  const allCompleted = files.length > 0 && files.every((f) => f.stage === "completed" || f.stage === "ready_for_download");
 
   const currentStage = (() => {
     if (files.some((f) => f.stage === "testing")) return "testing";
