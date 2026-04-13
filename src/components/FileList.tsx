@@ -12,6 +12,7 @@ interface FileListProps {
   onRemoveFile: (id: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  onSelectAll: () => void;
   selectionMode: "migration" | "testing" | null;
 }
 
