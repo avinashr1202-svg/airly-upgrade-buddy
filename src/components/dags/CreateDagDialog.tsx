@@ -268,6 +268,24 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
           </div>
         ) : (
           <div className="space-y-4 mt-2">
+            {/* Airflow Connection */}
+            <fieldset className="space-y-3 border border-border rounded-lg p-3">
+              <legend className="text-xs font-semibold px-1 text-muted-foreground">Airflow Connection *</legend>
+              <div className="space-y-2">
+                <Label className="text-xs">API URL *</Label>
+                <Input placeholder="http://airflow-host:8080" value={airflowUrl} onChange={(e) => setAirflowUrl(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label className="text-xs">Username</Label>
+                  <Input placeholder="admin" value={airflowUser} onChange={(e) => setAirflowUser(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Password</Label>
+                  <Input type="password" placeholder="••••••" value={airflowPass} onChange={(e) => setAirflowPass(e.target.value)} />
+                </div>
+              </div>
+            </fieldset>
             <div className="space-y-2">
               <Label className="text-xs">DAG Name *</Label>
               <Input placeholder="monitor_dag" value={monName} onChange={(e) => setMonName(e.target.value)} />
