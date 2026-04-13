@@ -197,6 +197,7 @@ const Index = () => {
             onRemoveFile={handleRemoveFile}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
             selectionMode={selectionMode}
           />
         </div>
