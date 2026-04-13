@@ -21,6 +21,7 @@ const createFile = (name: string, code: string): FileEntry => ({
   deployResult: null,
   testResult: null,
   error: null,
+  liveLog: [],
 });
 
 const Index = () => {
