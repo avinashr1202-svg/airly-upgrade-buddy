@@ -254,51 +254,6 @@ const Settings = () => {
             ))}
           </div>
 
-          <Separator />
-
-          {/* Airflow Connection Defaults */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Server className="w-4 h-4" />
-              Default Airflow Connection
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Set default Airflow REST API connection. Individual DAGs can override these values.
-            </p>
-            <Card className="p-4 space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Default Airflow API URL</Label>
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="http://localhost:8080/api/v1"
-                  defaultValue={localStorage.getItem("airflow_default_url") || ""}
-                  onChange={(e) => localStorage.setItem("airflow_default_url", e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Default Username</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder="admin"
-                    defaultValue={localStorage.getItem("airflow_default_user") || ""}
-                    onChange={(e) => localStorage.setItem("airflow_default_user", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Default Password</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    type="password"
-                    placeholder="••••••••"
-                    defaultValue={localStorage.getItem("airflow_default_pass") || ""}
-                    onChange={(e) => localStorage.setItem("airflow_default_pass", e.target.value)}
-                  />
-                </div>
-              </div>
-            </Card>
-          </div>
-
           <div className="flex justify-end pt-2 pb-6">
             <Button className="gap-1.5" onClick={handleSave}>
               <Save className="w-4 h-4" />
