@@ -41,7 +41,8 @@ export type PipelineStage =
   | "migration"       // Currently migrating
   | "migration_done"  // Migration complete
   | "testing"         // Currently testing
-  | "completed";      // All done
+  | "completed"       // Testing done, ready for download
+  | "ready_for_download"; // Moved to download tab
 
 export interface FileEntry {
   id: string;

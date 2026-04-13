@@ -41,7 +41,7 @@ export function FileDetailModal({ file, open, onClose }: FileDetailModalProps) {
         <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle className="flex items-center gap-3">
             <span>{file.name}</span>
-            {file.stage === "completed" && <Badge className="bg-success/20 text-success text-xs">Completed</Badge>}
+            {(file.stage === "completed" || file.stage === "ready_for_download") && <Badge className="bg-success/20 text-success text-xs">Completed</Badge>}
             {file.error && <Badge variant="destructive" className="text-xs">{file.error}</Badge>}
           </DialogTitle>
         </DialogHeader>

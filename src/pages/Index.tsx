@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { FileList } from "@/components/FileList";
+import type { FileTab } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
 import { FileDetailModal } from "@/components/FileDetailModal";
 
@@ -28,6 +29,7 @@ const Index = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<"migration" | "testing" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<FileTab>("deployed");
 
   const selectedFile = files.find((f) => f.id === selectedFileId) || null;
 
@@ -36,7 +38,6 @@ const Index = () => {
   }, []);
 
   const handleUploadFiles = useCallback((uploadedFiles: File[]) => {
-    let count = 0;
     uploadedFiles.forEach((file) => {
       if (!file.name.endsWith(".py")) return;
       const reader = new FileReader();
@@ -44,10 +45,10 @@ const Index = () => {
         const code = e.target?.result as string;
         const entry = createFile(file.name, code);
         setFiles((prev) => [...prev, entry]);
-        count++;
       };
       reader.readAsText(file);
     });
+    setActiveTab("deployed");
     toast.success("Files deployed to utility successfully.");
   }, []);
 
@@ -86,7 +87,7 @@ const Index = () => {
     const eligibleIds = eligible.map((f) => f.id);
     setSelectedIds((prev) => {
       const allSelected = eligibleIds.every((id) => prev.has(id));
-      if (allSelected) return new Set(); // deselect all
+      if (allSelected) return new Set();
       return new Set(eligibleIds);
     });
   }, [files, selectionMode]);
@@ -94,7 +95,23 @@ const Index = () => {
   const handleEnterSelectionMode = useCallback((mode: "migration" | "testing") => {
     setSelectionMode(mode);
     setSelectedIds(new Set());
+    // Switch to the relevant tab
+    if (mode === "migration") setActiveTab("deployed");
+    if (mode === "testing") setActiveTab("migration");
   }, []);
+
+  const handleDownloadFile = useCallback((id: string) => {
+    const file = files.find((f) => f.id === id);
+    if (!file) return;
+    const finalCode = file.deployResult?.deployed_code || file.migrationResult?.fixed_code || file.inputCode;
+    const blob = new Blob([finalCode], { type: "text/x-python" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name.replace(".py", "_airflow3.py");
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [files]);
 
   // Run migration for selected files
   async function runMigration(file: FileEntry): Promise<boolean> {
@@ -126,7 +143,13 @@ const Index = () => {
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      updateFile(file.id, { stage: "completed", progress: 100, testResult: data });
+      // Check if all tests passed
+      const allPassed = data?.overall_status === "pass";
+      if (allPassed) {
+        updateFile(file.id, { stage: "ready_for_download", progress: 100, testResult: data });
+      } else {
+        updateFile(file.id, { stage: "completed", progress: 100, testResult: data });
+      }
       return true;
     } catch (err: any) {
       updateFile(file.id, { stage: "migration_done", progress: 0, error: err.message || "Testing failed" });
@@ -140,6 +163,7 @@ const Index = () => {
 
     setSelectionMode(null);
     setSelectedIds(new Set());
+    setActiveTab("migration");
     toast.info(`Migrating ${toMigrate.length} file(s)...`);
 
     for (const file of toMigrate) {
@@ -154,12 +178,19 @@ const Index = () => {
 
     setSelectionMode(null);
     setSelectedIds(new Set());
+    setActiveTab("testing");
     toast.info(`Testing ${toTest.length} file(s)...`);
 
     for (const file of toTest) {
       await runTesting(file);
     }
-    toast.success("Testing complete. Click files to view detailed results.");
+    
+    const downloadReady = files.filter((f) => f.stage === "ready_for_download").length;
+    if (downloadReady > 0) {
+      toast.success(`Testing complete. ${downloadReady} file(s) ready for download.`);
+    } else {
+      toast.success("Testing complete. Click files to view detailed results.");
+    }
   };
 
   const handleReset = () => {
@@ -168,6 +199,7 @@ const Index = () => {
     setSelectedFileId(null);
     setSelectionMode(null);
     setSelectedIds(new Set());
+    setActiveTab("deployed");
   };
 
   const anyProcessing = files.some((f) => f.stage === "migration" || f.stage === "testing");
@@ -188,13 +220,16 @@ const Index = () => {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: File list */}
+        {/* Left: File list with tabs */}
         <div className="w-72 border-r border-border flex flex-col shrink-0">
           <FileList
             files={files}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
             onUploadFiles={handleUploadFiles}
             onSelectFile={handleSelectFile}
             onRemoveFile={handleRemoveFile}
+            onDownloadFile={handleDownloadFile}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onSelectAll={handleSelectAll}
@@ -234,8 +269,10 @@ const Index = () => {
           ) : (
             <div className="text-center text-muted-foreground space-y-2">
               <p className="text-sm">
-                {files.every((f) => f.stage === "completed")
-                  ? "✅ All files completed. Click a file to view details."
+                {files.every((f) => f.stage === "ready_for_download")
+                  ? "✅ All files ready for download!"
+                  : files.every((f) => f.stage === "completed" || f.stage === "ready_for_download")
+                  ? "✅ All files completed. Check the Download tab for successful files."
                   : selectionMode === "migration"
                   ? "📋 Select deployed files to migrate, then click 'Migrate'."
                   : selectionMode === "testing"
@@ -245,7 +282,10 @@ const Index = () => {
                   : "Files deployed. Use 'Select & Migrate' to choose files for migration."}
               </p>
               <p className="text-xs">
-                {files.filter((f) => f.stage === "deployed").length} deployed · {files.filter((f) => f.stage === "migration_done").length} migrated · {files.filter((f) => f.stage === "completed").length} completed
+                {files.filter((f) => f.stage === "deployed").length} deployed ·{" "}
+                {files.filter((f) => f.stage === "migration_done").length} migrated ·{" "}
+                {files.filter((f) => f.stage === "completed").length} tested ·{" "}
+                {files.filter((f) => f.stage === "ready_for_download").length} ready for download
               </p>
             </div>
           )}
