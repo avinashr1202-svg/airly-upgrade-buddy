@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { FileList } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
 import { FileDetailModal } from "@/components/FileDetailModal";
-import { CustomRulesPanel } from "@/components/CustomRulesPanel";
+
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { FileEntry, PipelineStage } from "@/types/pipeline";
