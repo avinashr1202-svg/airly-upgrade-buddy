@@ -280,10 +280,12 @@ const Index = () => {
           />
         </div>
 
-        {/* Right: Diff viewer or status */}
+        {/* Right: Diff viewer, live status, or placeholder */}
         <div className="flex-1 flex flex-col min-w-0">
           {selectedFile && selectedFile.stage !== "deployed" ? (
             <CodeDiffViewer file={selectedFile} />
+          ) : anyProcessing ? (
+            <LiveStatusPanel files={files} />
           ) : files.length === 0 ? (
             <div
               className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-8 cursor-pointer"
@@ -322,8 +324,6 @@ const Index = () => {
                   ? "📋 Select deployed files to migrate, then click 'Migrate'."
                   : selectionMode === "testing"
                   ? "📋 Select migrated files to test, then click 'Test'."
-                  : anyProcessing
-                  ? "⏳ Processing..."
                   : "Click a migrated file to view the side-by-side diff."}
               </p>
               <p className="text-xs">
