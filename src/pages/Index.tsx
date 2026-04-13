@@ -5,6 +5,7 @@ import { FileList } from "@/components/FileList";
 import type { FileTab } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
 import { CodeDiffViewer } from "@/components/CodeDiffViewer";
+import { LiveStatusPanel } from "@/components/LiveStatusPanel";
 
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
