@@ -37,7 +37,7 @@ function isSelectable(stage: FileEntry["stage"], mode: "migration" | "testing" |
   return false;
 }
 
-export function FileList({ files, onUploadFiles, onSelectFile, onRemoveFile, selectedIds, onToggleSelect, selectionMode }: FileListProps) {
+export function FileList({ files, onUploadFiles, onSelectFile, onRemoveFile, selectedIds, onToggleSelect, onSelectAll, selectionMode }: FileListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
