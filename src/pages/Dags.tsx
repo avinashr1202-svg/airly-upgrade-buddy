@@ -4,11 +4,14 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, AlertTriangle, Activity, Download, Play, Eye, Trash2, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { CreateDagDialog } from "@/components/dags/CreateDagDialog";
 import { DagRunsPanel } from "@/components/dags/DagRunsPanel";
 import { DagCodeViewer } from "@/components/dags/DagCodeViewer";
+import { ErrorCollectionResults } from "@/components/dags/ErrorCollectionResults";
+import { MonitorResults } from "@/components/dags/MonitorResults";
 
 interface DagTemplate {
   id: string;
@@ -33,6 +36,8 @@ interface DagRun {
 const Dags = () => {
   const [templates, setTemplates] = useState<DagTemplate[]>([]);
   const [runs, setRuns] = useState<DagRun[]>([]);
+  const [collectedErrors, setCollectedErrors] = useState<any[]>([]);
+  const [monitorResults, setMonitorResults] = useState<any[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<DagTemplate | null>(null);
   const [viewingCode, setViewingCode] = useState<DagTemplate | null>(null);
@@ -48,15 +53,40 @@ const Dags = () => {
     if (data) setRuns(data as DagRun[]);
   }, []);
 
+  const fetchCollectedErrors = useCallback(async (templateId?: string) => {
+    let query = supabase.from("dag_collected_errors").select("*").order("collected_at", { ascending: false });
+    if (templateId) query = query.eq("template_id", templateId);
+    const { data } = await query;
+    if (data) setCollectedErrors(data);
+  }, []);
+
+  const fetchMonitorResults = useCallback(async (templateId?: string) => {
+    let query = supabase.from("dag_monitor_results").select("*").order("collected_at", { ascending: false });
+    if (templateId) query = query.eq("template_id", templateId);
+    const { data } = await query;
+    if (data) setMonitorResults(data);
+  }, []);
+
   useEffect(() => {
     fetchTemplates();
     fetchRuns();
   }, [fetchTemplates, fetchRuns]);
 
+  useEffect(() => {
+    if (selectedTemplate) {
+      if (selectedTemplate.type === "error_collection") {
+        fetchCollectedErrors(selectedTemplate.id);
+      } else {
+        fetchMonitorResults(selectedTemplate.id);
+      }
+    }
+  }, [selectedTemplate, fetchCollectedErrors, fetchMonitorResults]);
+
   const handleDelete = async (id: string) => {
     await supabase.from("dag_templates").delete().eq("id", id);
     setTemplates((prev) => prev.filter((t) => t.id !== id));
     setRuns((prev) => prev.filter((r) => r.template_id !== id));
+    if (selectedTemplate?.id === id) setSelectedTemplate(null);
     toast.success("DAG template deleted.");
   };
 
@@ -71,11 +101,9 @@ const Dags = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleRunMonitorDag = async (template: DagTemplate) => {
-    if (template.type !== "monitor") return;
+  const handleRunDag = async (template: DagTemplate) => {
     setRunningDag(template.id);
 
-    // Create a run record
     const { data: run, error: insertError } = await supabase
       .from("dag_runs")
       .insert({ template_id: template.id, status: "running" as const })
@@ -88,19 +116,19 @@ const Dags = () => {
       return;
     }
 
-    // Simulate DAG execution via edge function
+    const functionName = template.type === "monitor" ? "run-monitor-dag" : "run-error-dag";
+
     try {
-      const { data, error } = await supabase.functions.invoke("run-monitor-dag", {
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { template_id: template.id, run_id: run.id, config: template.config },
       });
 
       if (error) throw new Error(error.message);
 
-      // Update run with results
       await supabase
         .from("dag_runs")
         .update({
-          status: data.status as "success" | "failed",
+          status: (data.status || "success") as "success" | "failed",
           logs: data.logs,
           error_details: data.error_details || null,
           fix_suggestion: data.fix_suggestion || null,
@@ -109,7 +137,19 @@ const Dags = () => {
         .eq("id", run.id);
 
       await fetchRuns();
-      toast.success(data.status === "success" ? "DAG run completed successfully!" : "DAG run failed. Click to see details.");
+
+      // Refresh results
+      if (template.type === "error_collection") {
+        await fetchCollectedErrors(template.id);
+      } else {
+        await fetchMonitorResults(template.id);
+      }
+
+      toast.success(
+        data.status === "success" || !data.status
+          ? "DAG run completed successfully!"
+          : "DAG run completed with errors. Check results."
+      );
     } catch (err: any) {
       await supabase
         .from("dag_runs")
@@ -228,42 +268,59 @@ const Dags = () => {
                       </Button>
                     </>
                   )}
-                  {selectedTemplate.type === "monitor" && (
-                    <Button
-                      size="sm"
-                      className="gap-1.5 text-xs"
-                      onClick={() => handleRunMonitorDag(selectedTemplate)}
-                      disabled={runningDag === selectedTemplate.id}
-                    >
-                      {runningDag === selectedTemplate.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5" />
-                      )}
-                      Run DAG
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => handleRunDag(selectedTemplate)}
+                    disabled={runningDag === selectedTemplate.id}
+                  >
+                    {runningDag === selectedTemplate.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5" />
+                    )}
+                    Run DAG
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(selectedTemplate.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
-              {/* Config summary */}
-              <div className="p-4 border-b border-border bg-muted/30">
-                <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONFIGURATION</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {Object.entries(selectedTemplate.config).map(([key, value]) => (
-                    <div key={key} className="flex gap-2">
-                      <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
-                      <span className="font-medium">{String(value)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Tabs for Config, Results, Run History */}
+              <Tabs defaultValue="results" className="flex-1 flex flex-col overflow-hidden">
+                <TabsList className="mx-4 mt-2 w-fit">
+                  <TabsTrigger value="results" className="text-xs">
+                    {selectedTemplate.type === "error_collection" ? "Collected Errors" : "Monitor Results"}
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="text-xs">Run History</TabsTrigger>
+                  <TabsTrigger value="config" className="text-xs">Configuration</TabsTrigger>
+                </TabsList>
 
-              {/* Runs list */}
-              <DagRunsPanel runs={templateRuns} templateType={selectedTemplate.type} />
+                <TabsContent value="results" className="flex-1 flex flex-col overflow-hidden mt-0">
+                  {selectedTemplate.type === "error_collection" ? (
+                    <ErrorCollectionResults errors={collectedErrors} />
+                  ) : (
+                    <MonitorResults results={monitorResults} />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="history" className="flex-1 flex flex-col overflow-hidden mt-0">
+                  <DagRunsPanel runs={templateRuns} templateType={selectedTemplate.type} />
+                </TabsContent>
+
+                <TabsContent value="config" className="mt-0 p-4">
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONFIGURATION</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {Object.entries(selectedTemplate.config).map(([key, value]) => (
+                      <div key={key} className="flex gap-2">
+                        <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
+                        <span className="font-medium">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
