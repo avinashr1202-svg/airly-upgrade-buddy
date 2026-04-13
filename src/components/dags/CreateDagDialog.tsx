@@ -93,10 +93,19 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
       let name: string;
       let config: Record<string, any>;
 
+      if (!airflowUrl.trim()) { toast.error("Airflow API URL is required."); setSaving(false); return; }
+
+      const airflowConnection = {
+        api_url: airflowUrl.trim(),
+        username: airflowUser.trim(),
+        password: airflowPass.trim(),
+      };
+
       if (dagType === "error_collection") {
         name = ecName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
+          airflow: airflowConnection,
           storage_type: ecStorage,
           file_path: ecStorage === "file" ? ecFilePath : undefined,
           db_connection: ecStorage === "database" ? ecDbConn : undefined,
@@ -109,6 +118,7 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
         name = monName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
+          airflow: airflowConnection,
           target_dags: monTargetDags.split(",").map((s) => s.trim()).filter(Boolean),
           schedule: monSchedule,
           airflow_connection: monAirflowConn,
