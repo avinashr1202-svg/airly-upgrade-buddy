@@ -36,7 +36,12 @@ export interface TestCase {
   fix_suggestion: string | null;
 }
 
-export type PipelineStage = "idle" | "migration" | "migration_done" | "deployment" | "deployment_done" | "testing" | "testing_done" | "completed";
+export type PipelineStage =
+  | "deployed"        // File uploaded to utility
+  | "migration"       // Currently migrating
+  | "migration_done"  // Migration complete
+  | "testing"         // Currently testing
+  | "completed";      // All done
 
 export interface FileEntry {
   id: string;

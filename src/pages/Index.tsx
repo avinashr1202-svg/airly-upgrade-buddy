@@ -7,14 +7,14 @@ import { FileDetailModal } from "@/components/FileDetailModal";
 
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
-import type { FileEntry, PipelineStage } from "@/types/pipeline";
+import type { FileEntry } from "@/types/pipeline";
 
 let fileCounter = 0;
 const createFile = (name: string, code: string): FileEntry => ({
   id: `file-${++fileCounter}`,
   name,
   inputCode: code,
-  stage: "idle",
+  stage: "deployed",
   progress: 0,
   migrationResult: null,
   deployResult: null,
@@ -26,8 +26,8 @@ const Index = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [pausedStage, setPausedStage] = useState<string>("");
+  const [selectionMode, setSelectionMode] = useState<"migration" | "testing" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const selectedFile = files.find((f) => f.id === selectedFileId) || null;
 
@@ -36,6 +36,7 @@ const Index = () => {
   }, []);
 
   const handleUploadFiles = useCallback((uploadedFiles: File[]) => {
+    let count = 0;
     uploadedFiles.forEach((file) => {
       if (!file.name.endsWith(".py")) return;
       const reader = new FileReader();
@@ -43,174 +44,119 @@ const Index = () => {
         const code = e.target?.result as string;
         const entry = createFile(file.name, code);
         setFiles((prev) => [...prev, entry]);
+        count++;
       };
       reader.readAsText(file);
     });
+    toast.success("Files deployed to utility successfully.");
   }, []);
 
   const handleRemoveFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }, []);
 
   const handleSelectFile = useCallback((id: string) => {
     const file = files.find((f) => f.id === id);
-    if (file && file.stage !== "idle") {
+    if (file && file.stage !== "deployed") {
       setSelectedFileId(id);
       setModalOpen(true);
     }
   }, [files]);
 
-  // Run migration stage for a single file
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleEnterSelectionMode = useCallback((mode: "migration" | "testing") => {
+    setSelectionMode(mode);
+    setSelectedIds(new Set());
+  }, []);
+
+  // Run migration for selected files
   async function runMigration(file: FileEntry): Promise<boolean> {
     updateFile(file.id, { stage: "migration", progress: 10, error: null });
-
     try {
       updateFile(file.id, { progress: 30 });
       const { data, error } = await supabase.functions.invoke("migrate-dag", {
         body: { code: file.inputCode, mode: "migrate" },
       });
-
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-
-      updateFile(file.id, {
-        stage: "migration_done",
-        progress: 100,
-        migrationResult: data,
-      });
+      updateFile(file.id, { stage: "migration_done", progress: 100, migrationResult: data });
       return true;
     } catch (err: any) {
-      updateFile(file.id, { stage: "idle", progress: 0, error: err.message || "Migration failed" });
+      updateFile(file.id, { stage: "deployed", progress: 0, error: err.message || "Migration failed" });
       return false;
     }
   }
 
-  // Run deployment stage for a single file
-  async function runDeployment(file: FileEntry): Promise<boolean> {
+  // Run testing for selected files
+  async function runTesting(file: FileEntry): Promise<boolean> {
     const code = file.migrationResult?.fixed_code;
     if (!code) return false;
-
-    updateFile(file.id, { stage: "deployment", progress: 10 });
-
-    try {
-      updateFile(file.id, { progress: 40 });
-      const { data, error } = await supabase.functions.invoke("deploy-stage", {
-        body: { code },
-      });
-
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-
-      updateFile(file.id, {
-        stage: "deployment_done",
-        progress: 100,
-        deployResult: data,
-      });
-      return true;
-    } catch (err: any) {
-      updateFile(file.id, { error: err.message || "Deployment stage failed" });
-      return false;
-    }
-  }
-
-  // Run testing stage for a single file
-  async function runTesting(file: FileEntry): Promise<boolean> {
-    const code = file.deployResult?.deployed_code || file.migrationResult?.fixed_code;
-    if (!code) return false;
-
     updateFile(file.id, { stage: "testing", progress: 10 });
-
     try {
       updateFile(file.id, { progress: 50 });
       const { data, error } = await supabase.functions.invoke("test-stage", {
         body: { code, original_code: file.inputCode },
       });
-
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-
-      updateFile(file.id, {
-        stage: "completed",
-        progress: 100,
-        testResult: data,
-      });
+      updateFile(file.id, { stage: "completed", progress: 100, testResult: data });
       return true;
     } catch (err: any) {
-      updateFile(file.id, { error: err.message || "Testing stage failed" });
+      updateFile(file.id, { stage: "migration_done", progress: 0, error: err.message || "Testing failed" });
       return false;
     }
   }
 
-  // Start full pipeline
-  const handleStartPipeline = async () => {
-    const pending = files.filter((f) => f.stage === "idle" && f.inputCode.trim());
-    if (pending.length === 0) {
-      toast.info("No files to process.");
-      return;
-    }
+  const handleStartMigration = async () => {
+    const toMigrate = files.filter((f) => selectedIds.has(f.id) && f.stage === "deployed");
+    if (toMigrate.length === 0) return;
 
-    // Stage 1: Migration
-    toast.info(`Starting migration for ${pending.length} file(s)...`);
-    for (const file of pending) {
+    setSelectionMode(null);
+    setSelectedIds(new Set());
+    toast.info(`Migrating ${toMigrate.length} file(s)...`);
+
+    for (const file of toMigrate) {
       await runMigration(file);
     }
-
-    // Pause after migration
-    setIsPaused(true);
-    setPausedStage("migration");
-    toast.success("Migration complete. Review results, then continue to Deployment stage.");
+    toast.success("Migration complete. Click files to review results.");
   };
 
-  const handleContinuePipeline = async () => {
-    setIsPaused(false);
+  const handleStartTesting = async () => {
+    const toTest = files.filter((f) => selectedIds.has(f.id) && f.stage === "migration_done");
+    if (toTest.length === 0) return;
 
-    if (pausedStage === "migration") {
-      // Stage 2: Deployment
-      const migrated = files.filter((f) => f.stage === "migration_done");
-      toast.info(`Starting deployment stage for ${migrated.length} file(s)...`);
+    setSelectionMode(null);
+    setSelectedIds(new Set());
+    toast.info(`Testing ${toTest.length} file(s)...`);
 
-      for (const file of migrated) {
-        // Get fresh file state
-        const freshFile = files.find((f) => f.id === file.id);
-        if (freshFile) await runDeployment(freshFile);
-      }
-
-      setIsPaused(true);
-      setPausedStage("deployment");
-      toast.success("Deployment stage complete. Review results, then continue to Testing.");
-    } else if (pausedStage === "deployment") {
-      // Stage 3: Testing
-      const deployed = files.filter((f) => f.stage === "deployment_done");
-      toast.info(`Starting testing stage for ${deployed.length} file(s)...`);
-
-      for (const file of deployed) {
-        const freshFile = files.find((f) => f.id === file.id);
-        if (freshFile) await runTesting(freshFile);
-      }
-
-      setIsPaused(false);
-      setPausedStage("");
-      toast.success("All stages complete! Click on files to view detailed results.");
+    for (const file of toTest) {
+      await runTesting(file);
     }
+    toast.success("Testing complete. Click files to view detailed results.");
   };
 
   const handleReset = () => {
     fileCounter = 0;
     setFiles([]);
     setSelectedFileId(null);
-    setIsPaused(false);
-    setPausedStage("");
+    setSelectionMode(null);
+    setSelectedIds(new Set());
   };
 
-  const getCurrentStage = (): string => {
-    if (files.some((f) => f.stage === "testing")) return "testing";
-    if (files.some((f) => f.stage === "deployment" || f.stage === "deployment_done")) return "deployment";
-    if (files.some((f) => f.stage === "migration" || f.stage === "migration_done")) return "migration";
-    if (files.some((f) => f.stage === "completed")) return "completed";
-    return "";
-  };
-
-  const hasDragTarget = files.length === 0;
+  const anyProcessing = files.some((f) => f.stage === "migration" || f.stage === "testing");
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -218,11 +164,13 @@ const Index = () => {
 
       <PipelineControls
         files={files}
-        onMigrateAll={handleStartPipeline}
-        onContinuePipeline={handleContinuePipeline}
+        onStartMigration={handleStartMigration}
+        onStartTesting={handleStartTesting}
         onReset={handleReset}
-        isPaused={isPaused}
-        currentStage={getCurrentStage()}
+        onEnterSelectionMode={handleEnterSelectionMode}
+        selectionMode={selectionMode}
+        selectedCount={selectedIds.size}
+        anyProcessing={anyProcessing}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -233,6 +181,9 @@ const Index = () => {
             onUploadFiles={handleUploadFiles}
             onSelectFile={handleSelectFile}
             onRemoveFile={handleRemoveFile}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            selectionMode={selectionMode}
           />
         </div>
 
@@ -262,22 +213,24 @@ const Index = () => {
               <Upload className="w-12 h-12 text-primary/50" />
               <div className="text-center">
                 <p className="text-sm font-medium text-foreground">Drop .py files here or click to upload</p>
-                <p className="text-xs text-muted-foreground mt-1">Upload your Airflow 2.x DAG files to begin the migration pipeline</p>
+                <p className="text-xs text-muted-foreground mt-1">Upload your Airflow 2.x DAG files to deploy to the utility</p>
               </div>
             </div>
           ) : (
             <div className="text-center text-muted-foreground space-y-2">
               <p className="text-sm">
                 {files.every((f) => f.stage === "completed")
-                  ? "✅ All files have completed the pipeline. Click a file to view details."
-                  : files.every((f) => f.stage === "idle")
-                  ? "Files uploaded. Click 'Start Pipeline' to begin migration."
-                  : isPaused
-                  ? `⏸ Pipeline paused. Review results, then click 'Continue'.`
-                  : "Processing..."}
+                  ? "✅ All files completed. Click a file to view details."
+                  : selectionMode === "migration"
+                  ? "📋 Select deployed files to migrate, then click 'Migrate'."
+                  : selectionMode === "testing"
+                  ? "📋 Select migrated files to test, then click 'Test'."
+                  : anyProcessing
+                  ? "⏳ Processing..."
+                  : "Files deployed. Use 'Select & Migrate' to choose files for migration."}
               </p>
               <p className="text-xs">
-                {files.filter((f) => f.stage === "completed").length} / {files.length} completed
+                {files.filter((f) => f.stage === "deployed").length} deployed · {files.filter((f) => f.stage === "migration_done").length} migrated · {files.filter((f) => f.stage === "completed").length} completed
               </p>
             </div>
           )}
