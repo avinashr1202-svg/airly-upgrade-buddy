@@ -41,6 +41,77 @@ export type Database = {
         }
         Relationships: []
       }
+      dag_runs: {
+        Row: {
+          completed_at: string | null
+          error_details: string | null
+          fix_suggestion: string | null
+          id: string
+          logs: string | null
+          started_at: string
+          status: Database["public"]["Enums"]["dag_run_status"]
+          template_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_details?: string | null
+          fix_suggestion?: string | null
+          id?: string
+          logs?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["dag_run_status"]
+          template_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_details?: string | null
+          fix_suggestion?: string | null
+          id?: string
+          logs?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["dag_run_status"]
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dag_runs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "dag_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dag_templates: {
+        Row: {
+          config: Json
+          created_at: string
+          generated_code: string | null
+          id: string
+          name: string
+          type: Database["public"]["Enums"]["dag_type"]
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          generated_code?: string | null
+          id?: string
+          name: string
+          type: Database["public"]["Enums"]["dag_type"]
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          generated_code?: string | null
+          id?: string
+          name?: string
+          type?: Database["public"]["Enums"]["dag_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -49,7 +120,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      dag_run_status: "running" | "success" | "failed"
+      dag_type: "error_collection" | "monitor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -176,6 +248,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      dag_run_status: ["running", "success", "failed"],
+      dag_type: ["error_collection", "monitor"],
+    },
   },
 } as const
