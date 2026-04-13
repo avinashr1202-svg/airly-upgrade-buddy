@@ -282,11 +282,6 @@ const Index = () => {
             </div>
           )}
         </div>
-
-        {/* Right: Rules panel */}
-        <div className="w-80 border-l border-border flex flex-col shrink-0">
-          <CustomRulesPanel />
-        </div>
       </div>
 
       <FileDetailModal
