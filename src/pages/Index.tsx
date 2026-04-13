@@ -77,6 +77,20 @@ const Index = () => {
     });
   }, []);
 
+  const handleSelectAll = useCallback(() => {
+    const eligible = files.filter((f) => {
+      if (selectionMode === "migration") return f.stage === "deployed";
+      if (selectionMode === "testing") return f.stage === "migration_done";
+      return false;
+    });
+    const eligibleIds = eligible.map((f) => f.id);
+    setSelectedIds((prev) => {
+      const allSelected = eligibleIds.every((id) => prev.has(id));
+      if (allSelected) return new Set(); // deselect all
+      return new Set(eligibleIds);
+    });
+  }, [files, selectionMode]);
+
   const handleEnterSelectionMode = useCallback((mode: "migration" | "testing") => {
     setSelectionMode(mode);
     setSelectedIds(new Set());
