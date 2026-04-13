@@ -10,6 +10,8 @@ import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { FileEntry } from "@/types/pipeline";
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 let fileCounter = 0;
 const createFile = (name: string, code: string): FileEntry => ({
   id: `file-${++fileCounter}`,
