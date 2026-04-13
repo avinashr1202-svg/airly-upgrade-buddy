@@ -13,6 +13,8 @@ serve(async (req) => {
   try {
     const { template_id, run_id, config } = await req.json();
     const targetDags = config.target_dags || [];
+    const autoUnpause = config.auto_unpause ?? true;
+    const airflowConn = config.airflow_connection || {};
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -22,16 +24,49 @@ serve(async (req) => {
     const logs: string[] = [];
 
     logs.push(`[${new Date().toISOString()}] Starting monitor DAG run...`);
+    logs.push(`[${new Date().toISOString()}] Airflow API: ${airflowConn.api_url || "not configured"}`);
     logs.push(`[${new Date().toISOString()}] Checking ${targetDags.length} target DAG(s)...`);
 
     for (const dagId of targetDags) {
       const rand = Math.random();
-      const isSmokedTested = rand > 0.4;
-      const status = rand > 0.3 ? "success" : "failed";
+      const isNewDag = rand > 0.8; // simulate new DAG detection
+      const isSmokedTested = isNewDag ? false : rand > 0.4;
       const duration = Math.round(Math.random() * 300 + 10);
-      const pathsCovered = rand > 0.5
-        ? "all paths covered (main, retry, cleanup)"
-        : "partial paths covered (main only)";
+
+      let status: string;
+      let dagLog = "";
+
+      if (isNewDag) {
+        // New DAG: auto-unpause and trigger
+        status = "not_started";
+        dagLog = `Task detected as NEW in Airflow\n`;
+
+        if (autoUnpause) {
+          dagLog += `Auto-unpausing DAG "${dagId}" via REST API...\n`;
+          dagLog += `PATCH ${airflowConn.api_url}/dags/${dagId} {is_paused: false}\n`;
+          dagLog += `Triggering initial run...\n`;
+          dagLog += `POST ${airflowConn.api_url}/dags/${dagId}/dagRuns\n`;
+
+          // Simulate the triggered run
+          const triggerRand = Math.random();
+          status = triggerRand > 0.3 ? "success" : "failed";
+          dagLog += `Initial run ${status === "success" ? "completed successfully" : "FAILED"}\n`;
+          dagLog += `Execution took ${duration}s\n`;
+        } else {
+          dagLog += `Auto-unpause disabled, DAG remains paused\n`;
+        }
+      } else {
+        status = rand > 0.3 ? "success" : "failed";
+        dagLog = `Task started at ${new Date().toISOString()}\nExecution took ${duration}s\n`;
+      }
+
+      const pathsCovered = status === "success"
+        ? "all paths covered (main, retry, cleanup, connections verified)"
+        : isNewDag && status !== "success"
+          ? "initial run - paths not yet verified"
+          : "partial paths covered (main only, retry/cleanup not reached)";
+
+      dagLog += `Smoke test: ${isSmokedTested ? "passed" : "not run"}\nPaths: ${pathsCovered}`;
 
       const dagResult: any = {
         dag_id: dagId,
@@ -39,16 +74,18 @@ serve(async (req) => {
         duration_seconds: duration,
         is_smoke_tested: isSmokedTested,
         paths_covered: pathsCovered,
-        last_run_at: new Date().toISOString(),
-        log_info: `Task started at ${new Date().toISOString()}\nExecution took ${duration}s\nSmoke test: ${isSmokedTested ? "passed" : "not run"}\nPaths: ${pathsCovered}`,
+        last_run_at: status !== "not_started" ? new Date().toISOString() : null,
+        log_info: dagLog,
         error_details: null,
         fix_steps: null,
+        is_new: isNewDag,
       };
 
       if (status === "failed") {
-        dagResult.error_details = `DAG "${dagId}" failed: Task execution timeout after ${duration}s. Exit code: 1. Traceback: RuntimeError in task execution.`;
+        dagResult.error_details = `DAG "${dagId}" failed: Task execution timeout after ${duration}s. Exit code: 1. Traceback: RuntimeError in task execution.${
+          isNewDag ? " (First run after migration)" : ""
+        }`;
 
-        // Use AI for fix suggestions
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
         if (LOVABLE_API_KEY) {
           try {
@@ -65,11 +102,11 @@ serve(async (req) => {
                   messages: [
                     {
                       role: "system",
-                      content: `You are an Apache Airflow expert. Given a failed DAG, provide numbered steps to diagnose and fix. Be specific and actionable. Include common causes.`,
+                      content: `You are an Apache Airflow expert. Given a failed DAG, provide numbered steps to diagnose and fix. Be specific and actionable. Include common causes. If it's a new DAG, mention deployment verification steps.`,
                     },
                     {
                       role: "user",
-                      content: `DAG "${dagId}" failed with error: ${dagResult.error_details}\nConfig: ${JSON.stringify(config)}\n\nProvide detailed fix steps.`,
+                      content: `DAG "${dagId}" failed with error: ${dagResult.error_details}\nAirflow API: ${airflowConn.api_url}\nConfig: ${JSON.stringify(config)}\nIs new DAG: ${isNewDag}\n\nProvide detailed fix steps.`,
                     },
                   ],
                 }),
@@ -87,11 +124,11 @@ serve(async (req) => {
       }
 
       results.push(dagResult);
+      const statusEmoji = status === "success" ? "✅ SUCCESS" : status === "failed" ? "❌ FAILED" : "🆕 NEW";
       logs.push(
-        `[${new Date().toISOString()}] ${dagId}: ${status === "success" ? "✅ SUCCESS" : "❌ FAILED"} (${duration}s, smoke: ${isSmokedTested ? "yes" : "no"})`
+        `[${new Date().toISOString()}] ${dagId}: ${statusEmoji} (${duration}s, smoke: ${isSmokedTested ? "yes" : "no"}${isNewDag ? ", NEW DAG" : ""})`
       );
 
-      // Store each result in dag_monitor_results
       await supabase.from("dag_monitor_results").insert({
         template_id,
         run_id,

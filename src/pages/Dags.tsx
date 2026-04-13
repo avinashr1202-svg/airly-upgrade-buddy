@@ -5,8 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, AlertTriangle, Activity, Download, Play, Eye, Trash2, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Plus, AlertTriangle, Activity, Download, Play, Eye, Trash2, CheckCircle, XCircle, Loader2, Filter } from "lucide-react";
 import { CreateDagDialog } from "@/components/dags/CreateDagDialog";
 import { DagRunsPanel } from "@/components/dags/DagRunsPanel";
 import { DagCodeViewer } from "@/components/dags/DagCodeViewer";
@@ -33,6 +40,8 @@ interface DagRun {
   completed_at: string | null;
 }
 
+type ListFilter = "all" | "error_collection" | "monitor";
+
 const Dags = () => {
   const [templates, setTemplates] = useState<DagTemplate[]>([]);
   const [runs, setRuns] = useState<DagRun[]>([]);
@@ -42,6 +51,7 @@ const Dags = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<DagTemplate | null>(null);
   const [viewingCode, setViewingCode] = useState<DagTemplate | null>(null);
   const [runningDag, setRunningDag] = useState<string | null>(null);
+  const [listFilter, setListFilter] = useState<ListFilter>("all");
 
   const fetchTemplates = useCallback(async () => {
     const { data } = await supabase.from("dag_templates").select("*").order("created_at", { ascending: false });
@@ -138,7 +148,6 @@ const Dags = () => {
 
       await fetchRuns();
 
-      // Refresh results
       if (template.type === "error_collection") {
         await fetchCollectedErrors(template.id);
       } else {
@@ -166,7 +175,19 @@ const Dags = () => {
     }
   };
 
+  const getLastRunStatus = (templateId: string): DagRun | undefined => {
+    return runs.find((r) => r.template_id === templateId);
+  };
+
+  const filteredTemplates = templates.filter((t) => listFilter === "all" || t.type === listFilter);
+
   const templateRuns = selectedTemplate ? runs.filter((r) => r.template_id === selectedTemplate.id) : [];
+
+  // Hide sensitive fields from config display
+  const displayConfig = (config: Record<string, any>) => {
+    const entries = Object.entries(config).filter(([key]) => key !== "airflow_connection");
+    return entries;
+  };
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -175,24 +196,36 @@ const Dags = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: DAG templates list */}
         <div className="w-80 border-r border-border flex flex-col shrink-0">
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">DAG Templates</h2>
-            <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 text-xs">
-              <Plus className="w-3.5 h-3.5" />
-              Add DAG
-            </Button>
+          <div className="p-4 border-b border-border space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground">DAG Templates</h2>
+              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 text-xs">
+                <Plus className="w-3.5 h-3.5" />
+                Add DAG
+              </Button>
+            </div>
+            <Select value={listFilter} onValueChange={(v) => setListFilter(v as ListFilter)}>
+              <SelectTrigger className="h-7 text-xs">
+                <Filter className="w-3 h-3 mr-1" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types ({templates.length})</SelectItem>
+                <SelectItem value="error_collection">Error Collection ({templates.filter(t => t.type === "error_collection").length})</SelectItem>
+                <SelectItem value="monitor">Monitor ({templates.filter(t => t.type === "monitor").length})</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {templates.length === 0 ? (
+            {filteredTemplates.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm p-4 text-center">
                 <p>No DAG templates yet.</p>
                 <p className="text-xs mt-1">Click "Add DAG" to create one.</p>
               </div>
             ) : (
-              templates.map((t) => {
-                const tRuns = runs.filter((r) => r.template_id === t.id);
-                const lastRun = tRuns[0];
+              filteredTemplates.map((t) => {
+                const lastRun = getLastRunStatus(t.id);
                 return (
                   <Card
                     key={t.id}
@@ -210,9 +243,24 @@ const Dags = () => {
                         )}
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{t.name}</p>
-                          <Badge variant="outline" className="text-[10px] mt-1">
-                            {t.type === "error_collection" ? "Error Collection" : "Monitor"}
-                          </Badge>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {t.type === "error_collection" ? "Error Collection" : "Monitor"}
+                            </Badge>
+                            {lastRun && (
+                              <Badge
+                                variant={lastRun.status === "success" ? "default" : lastRun.status === "failed" ? "destructive" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {lastRun.status}
+                              </Badge>
+                            )}
+                          </div>
+                          {lastRun && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Last: {new Date(lastRun.started_at).toLocaleString()}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -238,7 +286,6 @@ const Dags = () => {
         <div className="flex-1 flex flex-col min-w-0">
           {selectedTemplate ? (
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Template header */}
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -253,6 +300,10 @@ const Dags = () => {
                     {selectedTemplate.type === "error_collection"
                       ? "Collects and stores Airflow errors"
                       : "Monitors DAG execution and reports status"}
+                    {" · "}
+                    <span className="text-muted-foreground/70">
+                      Airflow: {(selectedTemplate.config as any)?.airflow_connection?.api_url || "Not configured"}
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -287,7 +338,6 @@ const Dags = () => {
                 </div>
               </div>
 
-              {/* Tabs for Config, Results, Run History */}
               <Tabs defaultValue="results" className="flex-1 flex flex-col overflow-hidden">
                 <TabsList className="mx-4 mt-2 w-fit">
                   <TabsTrigger value="results" className="text-xs">
@@ -309,15 +359,36 @@ const Dags = () => {
                   <DagRunsPanel runs={templateRuns} templateType={selectedTemplate.type} />
                 </TabsContent>
 
-                <TabsContent value="config" className="mt-0 p-4">
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONFIGURATION</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {Object.entries(selectedTemplate.config).map(([key, value]) => (
-                      <div key={key} className="flex gap-2">
-                        <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
-                        <span className="font-medium">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+                <TabsContent value="config" className="mt-0 p-4 space-y-4">
+                  {(selectedTemplate.config as any)?.airflow_connection && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-muted-foreground mb-2">AIRFLOW CONNECTION</h4>
+                      <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded border border-border bg-muted/30">
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground">API URL:</span>
+                          <span className="font-medium">{(selectedTemplate.config as any).airflow_connection.api_url}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground">Username:</span>
+                          <span className="font-medium">{(selectedTemplate.config as any).airflow_connection.username}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground">Password:</span>
+                          <span className="font-medium">••••••••</span>
+                        </div>
                       </div>
-                    ))}
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">DAG CONFIGURATION</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {displayConfig(selectedTemplate.config).map(([key, value]) => (
+                        <div key={key} className="flex gap-2">
+                          <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
+                          <span className="font-medium">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </TabsContent>
               </Tabs>
