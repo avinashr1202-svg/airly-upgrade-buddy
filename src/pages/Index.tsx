@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { FileList } from "@/components/FileList";
 import type { FileTab } from "@/components/FileList";
 import { PipelineControls } from "@/components/PipelineControls";
-import { FileDetailModal } from "@/components/FileDetailModal";
+import { CodeDiffViewer } from "@/components/CodeDiffViewer";
 
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
