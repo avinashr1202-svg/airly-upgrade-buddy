@@ -54,6 +54,7 @@ export interface FileEntry {
   deployResult: DeployResult | null;
   testResult: TestResult | null;
   error: string | null;
+  liveLog: string[];
 }
 
 export interface CustomRule {
