@@ -1,6 +1,6 @@
 import { Plus, X, Upload, FileCode2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { FileEntry } from "@/pages/Index";
+import type { FileEntry } from "@/types/pipeline";
 import { useRef } from "react";
 
 interface FileTabsProps {
