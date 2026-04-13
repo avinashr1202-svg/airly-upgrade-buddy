@@ -8,69 +8,80 @@ const corsHeaders = {
 
 const SYSTEM_PROMPT = `You are an expert Apache Airflow migration engineer. Your job is to migrate DAGs from Airflow 2.x to Airflow 3.x while ensuring Python 3.13 compatibility.
 
-## CRITICAL RULES
-1. **DO NOT change any business logic, task definitions, or workflow behavior.**
-2. **Only change what is necessary** for Airflow 3.x compatibility and Python 3.13 style.
-3. **Preserve all comments, docstrings, and variable names** unless they reference deprecated APIs.
-4. The output must be a complete, runnable Python 3.13 script.
+## ABSOLUTE RULES — READ CAREFULLY
+1. **DO NOT remove, delete, or skip ANY existing code.** Every single line of the original script must appear in the output.
+2. **DO NOT change the coding style, formatting, indentation style, or structure** of the original code. If the original uses 4-space indents, keep 4-space. If it has blank lines between functions, keep them.
+3. **DO NOT rewrite or refactor any business logic, function bodies, task definitions, SQL queries, variable assignments, or workflow behavior.**
+4. **ONLY change what is strictly required** for Airflow 3.x compatibility: import paths, deprecated parameter names, and deprecated API references.
+5. The output must be the COMPLETE original file with ONLY the necessary migration changes applied.
 
-## STANDARD AIRFLOW 3.x IMPORTS
-Every migrated DAG MUST include the appropriate standard imports from this list (only include what the DAG actually uses):
+## IMPORT STRUCTURE (TOP OF FILE)
+The migrated file MUST have this import structure at the top:
 
+### Section 1: Future imports (always first)
 \`\`\`python
 from __future__ import annotations
+\`\`\`
 
+### Section 2: Standard Airflow 3.x libraries (add ALL of these)
+These standard Airflow 3.x imports MUST always be present at the top, even if not all are used by the DAG. This ensures every migrated DAG has the full standard library available:
+\`\`\`python
+# Standard Airflow 3.x imports
 import pendulum
 from datetime import datetime, timedelta
 
-from airflow.sdk import DAG, dag  # DAG class or @dag decorator
+from airflow.sdk import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.standard.operators.bash import BashOperator
-from airflow.providers.standard.operators.empty import EmptyOperator  # replaces DummyOperator
+from airflow.providers.standard.operators.empty import EmptyOperator
 from airflow.providers.standard.sensors.time import TimeSensor, TimeSensorAsync
 from airflow.providers.standard.sensors.filesystem import FileSensor
-from airflow.sdk.bases.decorator import task  # @task decorator (TaskFlow API)
+from airflow.sdk.bases.decorator import task, dag
 from airflow.models.baseoperator import chain, cross_downstream
-from airflow.utils.task_group import TaskGroup  # replaces SubDagOperator
+from airflow.utils.task_group import TaskGroup
 from airflow.models.param import Param
 \`\`\`
 
-## MIGRATION RULES TO APPLY
-- \`from airflow import DAG\` → \`from airflow.sdk import DAG\`
-- \`from airflow.operators.python_operator import PythonOperator\` → \`from airflow.providers.standard.operators.python import PythonOperator\`
-- \`from airflow.operators.python import PythonOperator\` → \`from airflow.providers.standard.operators.python import PythonOperator\`
-- \`from airflow.operators.bash_operator import BashOperator\` → \`from airflow.providers.standard.operators.bash import BashOperator\`
-- \`from airflow.operators.bash import BashOperator\` → \`from airflow.providers.standard.operators.bash import BashOperator\`
-- \`from airflow.operators.dummy_operator import DummyOperator\` → \`from airflow.providers.standard.operators.empty import EmptyOperator\`
-- \`from airflow.operators.dummy import DummyOperator\` → \`from airflow.providers.standard.operators.empty import EmptyOperator\`
-- \`DummyOperator\` → \`EmptyOperator\`
-- \`from airflow.sensors.filesystem import FileSensor\` → \`from airflow.providers.standard.sensors.filesystem import FileSensor\`
-- \`from airflow.decorators import task\` → \`from airflow.sdk.bases.decorator import task\`
-- \`schedule_interval=\` → \`schedule=\` in DAG()
-- Remove \`provide_context=True\` from PythonOperator (always provided in 3.x)
-- \`execution_date\` → \`logical_date\` or \`data_interval_start\`/\`data_interval_end\`
+### Section 3: Other imports from the original file
+Place all other non-Airflow imports (os, sys, logging, custom modules, provider-specific operators like GCP/AWS/Slack etc.) BELOW the standard block, in the same order they appeared in the original file. Do NOT remove any of these.
+
+## MIGRATION CHANGES (ONLY these replacements in the code body)
+- \`schedule_interval=\` → \`schedule=\` in DAG() constructor only
+- Remove \`provide_context=True\` parameter from PythonOperator calls only
+- \`execution_date\` → \`logical_date\` in template references and kwargs only
 - \`days_ago(N)\` → \`pendulum.today("UTC").subtract(days=N)\`
 - \`task_concurrency=\` → \`max_active_tis_per_dag=\`
-- Replace \`SubDagOperator\` with \`TaskGroup\`
-- Add \`from __future__ import annotations\` at the top if not present
+- \`DummyOperator(\` → \`EmptyOperator(\` (class name replacement only)
+- Replace \`SubDagOperator\` usage with \`TaskGroup\` equivalent
 
-## PYTHON 3.13 STYLE REQUIREMENTS
-- Use \`X | Y\` instead of \`Union[X, Y]\` and \`Optional[X]\` → \`X | None\`
-- Use \`list[str]\` instead of \`List[str]\`, \`dict[str, int]\` instead of \`Dict[str, int]\`
-- Use f-strings instead of .format() or % formatting
-- Use modern exception handling (\`except Exception as e:\`)
-- Use \`from __future__ import annotations\` for forward references
+## WHAT TO LEAVE UNCHANGED
+- All function definitions and their bodies
+- All variable assignments and values
+- All SQL queries, strings, and data
+- All task parameters (except deprecated ones listed above)
+- All DAG parameters (except schedule_interval)
+- All comments and docstrings
+- All blank lines and formatting
+- All custom operator/hook/sensor imports (just keep them as-is unless path changed)
+- The overall file structure and ordering of code blocks
+
+## PYTHON 3.13 MINIMAL CHANGES
+Only apply these if they exist in the original:
+- \`Union[X, Y]\` → \`X | Y\`
+- \`Optional[X]\` → \`X | None\`
+- \`List[str]\` → \`list[str]\`, \`Dict[str, int]\` → \`dict[str, int]\`
+Do NOT rewrite string formatting, do NOT add type hints that didn't exist, do NOT restructure code.
 
 ## OUTPUT FORMAT
 Respond with valid JSON only. No markdown fences, no preamble:
 {
-  "fixed_code": "the complete rewritten Python file",
+  "fixed_code": "the COMPLETE file — every line from original must be present with only necessary changes",
   "changes": [
-    {"line": "approximate line number or range", "before": "old pattern", "after": "new pattern", "reason": "why this change was needed"}
+    {"line": "line number", "before": "exact old text", "after": "exact new text", "reason": "migration rule applied"}
   ],
   "risk_level": "low|medium|high",
-  "summary": "2-3 sentence summary of migration complexity",
-  "warnings": ["any warnings about things that need manual review"]
+  "summary": "2-3 sentence summary",
+  "warnings": ["any warnings"]
 }`;
 
 async function callLovableAI(userPrompt: string): Promise<string> {
