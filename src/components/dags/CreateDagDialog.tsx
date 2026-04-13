@@ -33,11 +33,6 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const [dagType, setDagType] = useState<"error_collection" | "monitor" | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Airflow connection fields (per DAG)
-  const [airflowUrl, setAirflowUrl] = useState("");
-  const [airflowUser, setAirflowUser] = useState("");
-  const [airflowPass, setAirflowPass] = useState("");
-
   // Error Collection fields
   const [ecName, setEcName] = useState("");
   const [ecStorage, setEcStorage] = useState<"file" | "database">("database");
@@ -61,9 +56,6 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const resetForm = () => {
     setStep("choose");
     setDagType(null);
-    setAirflowUrl("");
-    setAirflowUser("");
-    setAirflowPass("");
     setEcName("");
     setEcStorage("database");
     setEcFilePath("/opt/airflow/logs/errors.log");
@@ -93,19 +85,10 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
       let name: string;
       let config: Record<string, any>;
 
-      if (!airflowUrl.trim()) { toast.error("Airflow API URL is required."); setSaving(false); return; }
-
-      const airflowConnection = {
-        api_url: airflowUrl.trim(),
-        username: airflowUser.trim(),
-        password: airflowPass.trim(),
-      };
-
       if (dagType === "error_collection") {
         name = ecName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
-          airflow: airflowConnection,
           storage_type: ecStorage,
           file_path: ecStorage === "file" ? ecFilePath : undefined,
           db_connection: ecStorage === "database" ? ecDbConn : undefined,
@@ -118,7 +101,6 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
         name = monName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
-          airflow: airflowConnection,
           target_dags: monTargetDags.split(",").map((s) => s.trim()).filter(Boolean),
           schedule: monSchedule,
           airflow_connection: monAirflowConn,
@@ -197,24 +179,6 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
           </div>
         ) : dagType === "error_collection" ? (
           <div className="space-y-4 mt-2">
-            {/* Airflow Connection */}
-            <fieldset className="space-y-3 border border-border rounded-lg p-3">
-              <legend className="text-xs font-semibold px-1 text-muted-foreground">Airflow Connection *</legend>
-              <div className="space-y-2">
-                <Label className="text-xs">API URL *</Label>
-                <Input placeholder="http://airflow-host:8080" value={airflowUrl} onChange={(e) => setAirflowUrl(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <Label className="text-xs">Username</Label>
-                  <Input placeholder="admin" value={airflowUser} onChange={(e) => setAirflowUser(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Password</Label>
-                  <Input type="password" placeholder="••••••" value={airflowPass} onChange={(e) => setAirflowPass(e.target.value)} />
-                </div>
-              </div>
-            </fieldset>
             <div className="space-y-2">
               <Label className="text-xs">DAG Name *</Label>
               <Input placeholder="error_collector_dag" value={ecName} onChange={(e) => setEcName(e.target.value)} />
@@ -268,24 +232,6 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
           </div>
         ) : (
           <div className="space-y-4 mt-2">
-            {/* Airflow Connection */}
-            <fieldset className="space-y-3 border border-border rounded-lg p-3">
-              <legend className="text-xs font-semibold px-1 text-muted-foreground">Airflow Connection *</legend>
-              <div className="space-y-2">
-                <Label className="text-xs">API URL *</Label>
-                <Input placeholder="http://airflow-host:8080" value={airflowUrl} onChange={(e) => setAirflowUrl(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <Label className="text-xs">Username</Label>
-                  <Input placeholder="admin" value={airflowUser} onChange={(e) => setAirflowUser(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Password</Label>
-                  <Input type="password" placeholder="••••••" value={airflowPass} onChange={(e) => setAirflowPass(e.target.value)} />
-                </div>
-              </div>
-            </fieldset>
             <div className="space-y-2">
               <Label className="text-xs">DAG Name *</Label>
               <Input placeholder="monitor_dag" value={monName} onChange={(e) => setMonName(e.target.value)} />
