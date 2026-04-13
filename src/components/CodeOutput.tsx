@@ -5,9 +5,10 @@ import { useState } from "react";
 interface CodeOutputProps {
   code: string;
   isLoading: boolean;
+  fileName?: string;
 }
 
-export function CodeOutput({ code, isLoading }: CodeOutputProps) {
+export function CodeOutput({ code, isLoading, fileName }: CodeOutputProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -21,7 +22,7 @@ export function CodeOutput({ code, isLoading }: CodeOutputProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "dag_airflow3.py";
+    a.download = fileName ? fileName.replace(".py", "_airflow3.py") : "dag_airflow3.py";
     a.click();
     URL.revokeObjectURL(url);
   };
