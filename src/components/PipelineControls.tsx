@@ -1,64 +1,116 @@
-import { Play, SkipForward, RotateCcw } from "lucide-react";
+import { Play, SkipForward, RotateCcw, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FileEntry } from "@/types/pipeline";
 
 interface PipelineControlsProps {
   files: FileEntry[];
-  onMigrateAll: () => void;
-  onContinuePipeline: () => void;
+  onStartMigration: () => void;
+  onStartTesting: () => void;
   onReset: () => void;
-  isPaused: boolean;
-  currentStage: string;
+  onEnterSelectionMode: (mode: "migration" | "testing") => void;
+  selectionMode: "migration" | "testing" | null;
+  selectedCount: number;
+  anyProcessing: boolean;
 }
 
-export function PipelineControls({ files, onMigrateAll, onContinuePipeline, onReset, isPaused, currentStage }: PipelineControlsProps) {
-  const anyProcessing = files.some((f) =>
-    f.stage === "migration" || f.stage === "deployment" || f.stage === "testing"
-  );
-  const hasPendingFiles = files.some((f) => f.inputCode.trim() && f.stage === "idle");
+export function PipelineControls({
+  files,
+  onStartMigration,
+  onStartTesting,
+  onReset,
+  onEnterSelectionMode,
+  selectionMode,
+  selectedCount,
+  anyProcessing,
+}: PipelineControlsProps) {
+  const hasDeployed = files.some((f) => f.stage === "deployed");
+  const hasMigrated = files.some((f) => f.stage === "migration_done");
   const allCompleted = files.length > 0 && files.every((f) => f.stage === "completed");
+
+  const currentStage = (() => {
+    if (files.some((f) => f.stage === "testing")) return "testing";
+    if (files.some((f) => f.stage === "migration")) return "migration";
+    if (hasMigrated || files.some((f) => f.stage === "completed")) return "post-migration";
+    if (hasDeployed) return "deployed";
+    return "";
+  })();
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50">
       {/* Stage indicator */}
       <div className="flex items-center gap-2 flex-1">
-        <StageIndicator label="Migration" active={currentStage === "migration"} done={["deployment", "testing", "completed"].some((s) => files.some((f) => f.stage.startsWith(s.split("_")[0])))} />
+        <StageIndicator
+          label="Deployment"
+          active={currentStage === "deployed"}
+          done={files.length > 0}
+        />
         <div className="w-6 h-px bg-border" />
-        <StageIndicator label="Deployment" active={currentStage === "deployment"} done={["testing", "completed"].some((s) => files.some((f) => f.stage.startsWith(s.split("_")[0])))} />
+        <StageIndicator
+          label="Migration"
+          active={currentStage === "migration"}
+          done={hasMigrated || allCompleted}
+        />
         <div className="w-6 h-px bg-border" />
-        <StageIndicator label="Testing" active={currentStage === "testing"} done={allCompleted} />
+        <StageIndicator
+          label="Testing"
+          active={currentStage === "testing"}
+          done={allCompleted}
+        />
       </div>
 
       <div className="flex items-center gap-2">
-        {isPaused && (
+        {/* Migration actions */}
+        {selectionMode === "migration" && (
           <Button
-            onClick={onContinuePipeline}
+            onClick={onStartMigration}
+            disabled={selectedCount === 0 || anyProcessing}
             className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
             size="sm"
           >
-            <SkipForward className="w-3.5 h-3.5 mr-1" />
-            Continue to {currentStage === "migration" ? "Deployment" : "Testing"}
+            <Play className="w-3.5 h-3.5 mr-1" />
+            Migrate {selectedCount} file{selectedCount !== 1 ? "s" : ""}
           </Button>
         )}
 
-        {!isPaused && hasPendingFiles && (
+        {selectionMode === "testing" && (
           <Button
-            onClick={onMigrateAll}
-            disabled={anyProcessing}
+            onClick={onStartTesting}
+            disabled={selectedCount === 0 || anyProcessing}
             className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
             size="sm"
           >
-            {anyProcessing ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-1" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 mr-1" />
-                Start Pipeline ({files.filter((f) => f.stage === "idle" && f.inputCode.trim()).length} files)
-              </>
-            )}
+            <Play className="w-3.5 h-3.5 mr-1" />
+            Test {selectedCount} file{selectedCount !== 1 ? "s" : ""}
+          </Button>
+        )}
+
+        {!selectionMode && hasDeployed && !anyProcessing && (
+          <Button
+            onClick={() => onEnterSelectionMode("migration")}
+            className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
+            size="sm"
+          >
+            <CheckSquare className="w-3.5 h-3.5 mr-1" />
+            Select & Migrate
+          </Button>
+        )}
+
+        {!selectionMode && hasMigrated && !anyProcessing && (
+          <Button
+            onClick={() => onEnterSelectionMode("testing")}
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            <CheckSquare className="w-3.5 h-3.5 mr-1" />
+            Select & Test
+          </Button>
+        )}
+
+        {anyProcessing && !selectionMode && (
+          <Button disabled size="sm" className="text-xs">
+            <div className="w-3.5 h-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-1" />
+            Processing...
           </Button>
         )}
 
