@@ -1,253 +1,299 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
-import { CodeInput } from "@/components/CodeInput";
-import { CodeOutput } from "@/components/CodeOutput";
-import { ChangesList, type MigrationResult } from "@/components/ChangesList";
-import { MigrationRules } from "@/components/MigrationRules";
-import { FileTabs } from "@/components/FileTabs";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowRight, RotateCcw, Play } from "lucide-react";
+import { FileList } from "@/components/FileList";
+import { PipelineControls } from "@/components/PipelineControls";
+import { FileDetailModal } from "@/components/FileDetailModal";
+import { CustomRulesPanel } from "@/components/CustomRulesPanel";
+import { Upload } from "lucide-react";
 import { toast } from "sonner";
-
-export interface FileEntry {
-  id: string;
-  name: string;
-  inputCode: string;
-  outputCode: string;
-  result: MigrationResult | null;
-  isLoading: boolean;
-}
+import type { FileEntry, PipelineStage } from "@/types/pipeline";
 
 let fileCounter = 0;
-const createFile = (name = "untitled.py", code = ""): FileEntry => ({
+const createFile = (name: string, code: string): FileEntry => ({
   id: `file-${++fileCounter}`,
   name,
   inputCode: code,
-  outputCode: "",
-  result: null,
-  isLoading: false,
+  stage: "idle",
+  progress: 0,
+  migrationResult: null,
+  deployResult: null,
+  testResult: null,
+  error: null,
 });
 
 const Index = () => {
-  const [files, setFiles] = useState<FileEntry[]>([createFile()]);
-  const [activeFileId, setActiveFileId] = useState(files[0].id);
-  const [activeTab, setActiveTab] = useState("changes");
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedStage, setPausedStage] = useState<string>("");
 
-  const activeFile = files.find((f) => f.id === activeFileId) || files[0];
+  const selectedFile = files.find((f) => f.id === selectedFileId) || null;
 
   const updateFile = useCallback((id: string, updates: Partial<FileEntry>) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
   }, []);
 
-  const handleAddFile = useCallback(() => {
-    const newFile = createFile();
-    setFiles((prev) => [...prev, newFile]);
-    setActiveFileId(newFile.id);
-  }, []);
-
-  const handleCloseFile = useCallback(
-    (id: string) => {
-      setFiles((prev) => {
-        if (prev.length <= 1) return prev;
-        const next = prev.filter((f) => f.id !== id);
-        if (activeFileId === id) {
-          setActiveFileId(next[next.length - 1].id);
-        }
-        return next;
-      });
-    },
-    [activeFileId]
-  );
-
   const handleUploadFiles = useCallback((uploadedFiles: File[]) => {
-    const newEntries: FileEntry[] = [];
-    let lastId = "";
-
     uploadedFiles.forEach((file) => {
       if (!file.name.endsWith(".py")) return;
       const reader = new FileReader();
       reader.onload = (e) => {
         const code = e.target?.result as string;
         const entry = createFile(file.name, code);
-        newEntries.push(entry);
-        lastId = entry.id;
         setFiles((prev) => [...prev, entry]);
-        if (lastId) setActiveFileId(lastId);
       };
       reader.readAsText(file);
     });
   }, []);
 
-  const handleMigrate = async () => {
-    if (!activeFile.inputCode.trim()) {
-      toast.error("Please paste or upload your Airflow 2.x DAG code first.");
-      return;
-    }
+  const handleRemoveFile = useCallback((id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
 
-    updateFile(activeFile.id, { isLoading: true, outputCode: "", result: null });
+  const handleSelectFile = useCallback((id: string) => {
+    const file = files.find((f) => f.id === id);
+    if (file && file.stage !== "idle") {
+      setSelectedFileId(id);
+      setModalOpen(true);
+    }
+  }, [files]);
+
+  // Run migration stage for a single file
+  async function runMigration(file: FileEntry): Promise<boolean> {
+    updateFile(file.id, { stage: "migration", progress: 10, error: null });
 
     try {
+      updateFile(file.id, { progress: 30 });
       const { data, error } = await supabase.functions.invoke("migrate-dag", {
-        body: { code: activeFile.inputCode, mode: "migrate" },
+        body: { code: file.inputCode, mode: "migrate" },
       });
 
-      if (error) throw new Error(error.message || "Migration failed");
+      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      updateFile(activeFile.id, {
-        outputCode: data.fixed_code || "",
-        result: data,
-        isLoading: false,
+      updateFile(file.id, {
+        stage: "migration_done",
+        progress: 100,
+        migrationResult: data,
       });
-      setActiveTab("changes");
-      toast.success(`Migration complete — ${data.changes?.length || 0} changes applied`);
+      return true;
     } catch (err: any) {
-      console.error("Migration error:", err);
-      toast.error(err.message || "Migration failed. Please try again.");
-      updateFile(activeFile.id, { isLoading: false });
+      updateFile(file.id, { stage: "idle", progress: 0, error: err.message || "Migration failed" });
+      return false;
     }
-  };
+  }
 
-  const handleMigrateAll = async () => {
-    const pending = files.filter((f) => f.inputCode.trim() && !f.outputCode);
+  // Run deployment stage for a single file
+  async function runDeployment(file: FileEntry): Promise<boolean> {
+    const code = file.migrationResult?.fixed_code;
+    if (!code) return false;
+
+    updateFile(file.id, { stage: "deployment", progress: 10 });
+
+    try {
+      updateFile(file.id, { progress: 40 });
+      const { data, error } = await supabase.functions.invoke("deploy-stage", {
+        body: { code },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      updateFile(file.id, {
+        stage: "deployment_done",
+        progress: 100,
+        deployResult: data,
+      });
+      return true;
+    } catch (err: any) {
+      updateFile(file.id, { error: err.message || "Deployment stage failed" });
+      return false;
+    }
+  }
+
+  // Run testing stage for a single file
+  async function runTesting(file: FileEntry): Promise<boolean> {
+    const code = file.deployResult?.deployed_code || file.migrationResult?.fixed_code;
+    if (!code) return false;
+
+    updateFile(file.id, { stage: "testing", progress: 10 });
+
+    try {
+      updateFile(file.id, { progress: 50 });
+      const { data, error } = await supabase.functions.invoke("test-stage", {
+        body: { code, original_code: file.inputCode },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      updateFile(file.id, {
+        stage: "completed",
+        progress: 100,
+        testResult: data,
+      });
+      return true;
+    } catch (err: any) {
+      updateFile(file.id, { error: err.message || "Testing stage failed" });
+      return false;
+    }
+  }
+
+  // Start full pipeline
+  const handleStartPipeline = async () => {
+    const pending = files.filter((f) => f.stage === "idle" && f.inputCode.trim());
     if (pending.length === 0) {
-      toast.info("No unmigrated files to process.");
+      toast.info("No files to process.");
       return;
     }
 
+    // Stage 1: Migration
+    toast.info(`Starting migration for ${pending.length} file(s)...`);
     for (const file of pending) {
-      updateFile(file.id, { isLoading: true, outputCode: "", result: null });
+      await runMigration(file);
     }
 
-    for (const file of pending) {
-      try {
-        const { data, error } = await supabase.functions.invoke("migrate-dag", {
-          body: { code: file.inputCode, mode: "migrate" },
-        });
+    // Pause after migration
+    setIsPaused(true);
+    setPausedStage("migration");
+    toast.success("Migration complete. Review results, then continue to Deployment stage.");
+  };
 
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
+  const handleContinuePipeline = async () => {
+    setIsPaused(false);
 
-        updateFile(file.id, {
-          outputCode: data.fixed_code || "",
-          result: data,
-          isLoading: false,
-        });
-      } catch (err: any) {
-        console.error(`Migration error for ${file.name}:`, err);
-        updateFile(file.id, { isLoading: false });
-        toast.error(`Failed to migrate ${file.name}`);
+    if (pausedStage === "migration") {
+      // Stage 2: Deployment
+      const migrated = files.filter((f) => f.stage === "migration_done");
+      toast.info(`Starting deployment stage for ${migrated.length} file(s)...`);
+
+      for (const file of migrated) {
+        // Get fresh file state
+        const freshFile = files.find((f) => f.id === file.id);
+        if (freshFile) await runDeployment(freshFile);
       }
-    }
 
-    toast.success(`Batch migration complete for ${pending.length} file(s)`);
+      setIsPaused(true);
+      setPausedStage("deployment");
+      toast.success("Deployment stage complete. Review results, then continue to Testing.");
+    } else if (pausedStage === "deployment") {
+      // Stage 3: Testing
+      const deployed = files.filter((f) => f.stage === "deployment_done");
+      toast.info(`Starting testing stage for ${deployed.length} file(s)...`);
+
+      for (const file of deployed) {
+        const freshFile = files.find((f) => f.id === file.id);
+        if (freshFile) await runTesting(freshFile);
+      }
+
+      setIsPaused(false);
+      setPausedStage("");
+      toast.success("All stages complete! Click on files to view detailed results.");
+    }
   };
 
   const handleReset = () => {
     fileCounter = 0;
-    const fresh = createFile();
-    setFiles([fresh]);
-    setActiveFileId(fresh.id);
+    setFiles([]);
+    setSelectedFileId(null);
+    setIsPaused(false);
+    setPausedStage("");
   };
 
-  const anyLoading = files.some((f) => f.isLoading);
+  const getCurrentStage = (): string => {
+    if (files.some((f) => f.stage === "testing")) return "testing";
+    if (files.some((f) => f.stage === "deployment" || f.stage === "deployment_done")) return "deployment";
+    if (files.some((f) => f.stage === "migration" || f.stage === "migration_done")) return "migration";
+    if (files.some((f) => f.stage === "completed")) return "completed";
+    return "";
+  };
+
+  const hasDragTarget = files.length === 0;
 
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header />
 
-      {/* File Tabs */}
-      <FileTabs
+      <PipelineControls
         files={files}
-        activeFileId={activeFileId}
-        onSelectFile={setActiveFileId}
-        onAddFile={handleAddFile}
-        onCloseFile={handleCloseFile}
-        onUploadFiles={handleUploadFiles}
+        onMigrateAll={handleStartPipeline}
+        onContinuePipeline={handleContinuePipeline}
+        onReset={handleReset}
+        isPaused={isPaused}
+        currentStage={getCurrentStage()}
       />
 
-      {/* Action Bar */}
-      <div className="flex items-center justify-center gap-3 px-6 py-3 border-b border-border bg-card">
-        <Button
-          onClick={handleMigrate}
-          disabled={anyLoading || !activeFile.inputCode.trim()}
-          className="gradient-primary text-primary-foreground font-semibold px-6 glow-primary hover:opacity-90 transition-opacity"
-        >
-          {activeFile.isLoading ? (
-            <>
-              <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-              Migrating...
-            </>
-          ) : (
-            <>
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Migrate Current
-            </>
-          )}
-        </Button>
-        {files.length > 1 && (
-          <Button
-            onClick={handleMigrateAll}
-            disabled={anyLoading}
-            variant="outline"
-            size="sm"
-            className="text-primary border-primary/30 hover:bg-primary/10"
-          >
-            <Play className="w-3 h-3 mr-1" />
-            Migrate All ({files.filter((f) => f.inputCode.trim() && !f.outputCode).length})
-          </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={handleReset} disabled={anyLoading} className="text-muted-foreground">
-          <RotateCcw className="w-3 h-3 mr-1" />
-          Reset
-        </Button>
-      </div>
-
-      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Input */}
-        <div className="flex-1 border-r border-border flex flex-col min-w-0">
-          <CodeInput
-            code={activeFile.inputCode}
-            setCode={(code) => updateFile(activeFile.id, { inputCode: code })}
-            isLoading={activeFile.isLoading}
+        {/* Left: File list */}
+        <div className="w-72 border-r border-border flex flex-col shrink-0">
+          <FileList
+            files={files}
             onUploadFiles={handleUploadFiles}
+            onSelectFile={handleSelectFile}
+            onRemoveFile={handleRemoveFile}
           />
         </div>
 
-        {/* Center: Output */}
-        <div className="flex-1 border-r border-border flex flex-col min-w-0">
-          <CodeOutput code={activeFile.outputCode} isLoading={activeFile.isLoading} fileName={activeFile.name} />
+        {/* Center: Drop zone / status */}
+        <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+          {files.length === 0 ? (
+            <div
+              className="flex flex-col items-center gap-4 text-muted-foreground p-8 border-2 border-dashed border-border rounded-xl max-w-md mx-auto cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".py";
+                input.multiple = true;
+                input.onchange = (e) => {
+                  const target = e.target as HTMLInputElement;
+                  if (target.files?.length) handleUploadFiles(Array.from(target.files));
+                };
+                input.click();
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const droppedFiles = Array.from(e.dataTransfer.files).filter((f) => f.name.endsWith(".py"));
+                if (droppedFiles.length) handleUploadFiles(droppedFiles);
+              }}
+            >
+              <Upload className="w-12 h-12 text-primary/50" />
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">Drop .py files here or click to upload</p>
+                <p className="text-xs text-muted-foreground mt-1">Upload your Airflow 2.x DAG files to begin the migration pipeline</p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-muted-foreground space-y-2">
+              <p className="text-sm">
+                {files.every((f) => f.stage === "completed")
+                  ? "✅ All files have completed the pipeline. Click a file to view details."
+                  : files.every((f) => f.stage === "idle")
+                  ? "Files uploaded. Click 'Start Pipeline' to begin migration."
+                  : isPaused
+                  ? `⏸ Pipeline paused. Review results, then click 'Continue'.`
+                  : "Processing..."}
+              </p>
+              <p className="text-xs">
+                {files.filter((f) => f.stage === "completed").length} / {files.length} completed
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Right: Analysis Panel */}
-        <div className="w-80 flex flex-col min-w-0 shrink-0">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-            <TabsList className="w-full rounded-none border-b border-border bg-card h-auto p-0">
-              <TabsTrigger
-                value="changes"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs py-2.5"
-              >
-                Changes
-              </TabsTrigger>
-              <TabsTrigger
-                value="rules"
-                className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-accent data-[state=active]:bg-transparent text-xs py-2.5"
-              >
-                Rules
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="changes" className="flex-1 m-0 overflow-hidden">
-              <ChangesList result={activeFile.result} isLoading={activeFile.isLoading} />
-            </TabsContent>
-            <TabsContent value="rules" className="flex-1 m-0 overflow-hidden">
-              <MigrationRules />
-            </TabsContent>
-          </Tabs>
+        {/* Right: Rules panel */}
+        <div className="w-80 border-l border-border flex flex-col shrink-0">
+          <CustomRulesPanel />
         </div>
       </div>
+
+      <FileDetailModal
+        file={selectedFile}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+      />
     </div>
   );
 };
