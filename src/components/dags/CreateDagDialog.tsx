@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Activity, Loader2 } from "lucide-react";
+import { AlertTriangle, Activity, Loader2, Server } from "lucide-react";
 import { toast } from "sonner";
 
 interface CreateDagDialogProps {
@@ -32,6 +32,11 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const [step, setStep] = useState<"choose" | "configure">("choose");
   const [dagType, setDagType] = useState<"error_collection" | "monitor" | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Airflow connection (shared)
+  const [airflowApiUrl, setAirflowApiUrl] = useState("http://localhost:8080/api/v1");
+  const [airflowUsername, setAirflowUsername] = useState("admin");
+  const [airflowPassword, setAirflowPassword] = useState("");
 
   // Error Collection fields
   const [ecName, setEcName] = useState("");
@@ -47,15 +52,18 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const [monName, setMonName] = useState("");
   const [monTargetDags, setMonTargetDags] = useState("");
   const [monSchedule, setMonSchedule] = useState("*/5 * * * *");
-  const [monAirflowConn, setMonAirflowConn] = useState("airflow_default");
   const [monSlackConn, setMonSlackConn] = useState("");
   const [monSlackChannel, setMonSlackChannel] = useState("");
   const [monAutoRetry, setMonAutoRetry] = useState(true);
   const [monMaxRetries, setMonMaxRetries] = useState("2");
+  const [monAutoUnpause, setMonAutoUnpause] = useState(true);
 
   const resetForm = () => {
     setStep("choose");
     setDagType(null);
+    setAirflowApiUrl("http://localhost:8080/api/v1");
+    setAirflowUsername("admin");
+    setAirflowPassword("");
     setEcName("");
     setEcStorage("database");
     setEcFilePath("/opt/airflow/logs/errors.log");
@@ -67,11 +75,11 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
     setMonName("");
     setMonTargetDags("");
     setMonSchedule("*/5 * * * *");
-    setMonAirflowConn("airflow_default");
     setMonSlackConn("");
     setMonSlackChannel("");
     setMonAutoRetry(true);
     setMonMaxRetries("2");
+    setMonAutoUnpause(true);
   };
 
   const handleClose = (v: boolean) => {
@@ -85,10 +93,17 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
       let name: string;
       let config: Record<string, any>;
 
+      const airflowConnection = {
+        api_url: airflowApiUrl,
+        username: airflowUsername,
+        password: airflowPassword,
+      };
+
       if (dagType === "error_collection") {
         name = ecName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
+          airflow_connection: airflowConnection,
           storage_type: ecStorage,
           file_path: ecStorage === "file" ? ecFilePath : undefined,
           db_connection: ecStorage === "database" ? ecDbConn : undefined,
@@ -101,17 +116,17 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
         name = monName.trim();
         if (!name) { toast.error("DAG name is required."); setSaving(false); return; }
         config = {
+          airflow_connection: airflowConnection,
           target_dags: monTargetDags.split(",").map((s) => s.trim()).filter(Boolean),
           schedule: monSchedule,
-          airflow_connection: monAirflowConn,
           slack_connection: monSlackConn || undefined,
           slack_channel: monSlackChannel || undefined,
           auto_retry: monAutoRetry,
           max_retries: parseInt(monMaxRetries) || 2,
+          auto_unpause: monAutoUnpause,
         };
       }
 
-      // Generate the DAG code via edge function
       const { data: genData, error: genError } = await supabase.functions.invoke("generate-dag", {
         body: { type: dagType, name, config },
       });
@@ -140,6 +155,42 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
     }
   };
 
+  const AirflowConnectionSection = () => (
+    <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
+      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+        <Server className="w-3.5 h-3.5" />
+        AIRFLOW REST API CONNECTION
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs">API URL *</Label>
+        <Input
+          placeholder="http://localhost:8080/api/v1"
+          value={airflowApiUrl}
+          onChange={(e) => setAirflowApiUrl(e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label className="text-xs">Username</Label>
+          <Input
+            placeholder="admin"
+            value={airflowUsername}
+            onChange={(e) => setAirflowUsername(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Password</Label>
+          <Input
+            type="password"
+            placeholder="••••••••"
+            value={airflowPassword}
+            onChange={(e) => setAirflowPassword(e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -150,7 +201,7 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
           <DialogDescription>
             {step === "choose"
               ? "Choose the type of DAG you want to create."
-              : "Configure the DAG settings below."}
+              : "Configure the DAG settings and Airflow connection."}
           </DialogDescription>
         </DialogHeader>
 
@@ -163,7 +214,7 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
               <AlertTriangle className="w-8 h-8 text-orange-500" />
               <div className="text-center">
                 <p className="text-sm font-semibold">Error Collection DAG</p>
-                <p className="text-xs text-muted-foreground mt-1">Collect and store Airflow errors to file or database</p>
+                <p className="text-xs text-muted-foreground mt-1">Collect and store Airflow errors</p>
               </div>
             </button>
             <button
@@ -173,7 +224,7 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
               <Activity className="w-8 h-8 text-blue-500" />
               <div className="text-center">
                 <p className="text-sm font-semibold">Monitor DAG</p>
-                <p className="text-xs text-muted-foreground mt-1">Monitor DAG runs and provide detailed error fixes</p>
+                <p className="text-xs text-muted-foreground mt-1">Monitor DAG runs and status</p>
               </div>
             </button>
           </div>
@@ -183,6 +234,9 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
               <Label className="text-xs">DAG Name *</Label>
               <Input placeholder="error_collector_dag" value={ecName} onChange={(e) => setEcName(e.target.value)} />
             </div>
+
+            <AirflowConnectionSection />
+
             <div className="space-y-2">
               <Label className="text-xs">Error Storage</Label>
               <Select value={ecStorage} onValueChange={(v: "file" | "database") => setEcStorage(v)}>
@@ -236,6 +290,9 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
               <Label className="text-xs">DAG Name *</Label>
               <Input placeholder="monitor_dag" value={monName} onChange={(e) => setMonName(e.target.value)} />
             </div>
+
+            <AirflowConnectionSection />
+
             <div className="space-y-2">
               <Label className="text-xs">Target DAGs (comma-separated)</Label>
               <Textarea
@@ -244,14 +301,11 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
                 onChange={(e) => setMonTargetDags(e.target.value)}
                 rows={2}
               />
+              <p className="text-[10px] text-muted-foreground">Leave empty to auto-discover all DAGs from Airflow</p>
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Schedule</Label>
               <Input placeholder="*/5 * * * *" value={monSchedule} onChange={(e) => setMonSchedule(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Airflow Connection ID</Label>
-              <Input value={monAirflowConn} onChange={(e) => setMonAirflowConn(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Slack Connection ID (optional)</Label>
@@ -263,6 +317,10 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
                 <Input placeholder="#airflow-alerts" value={monSlackChannel} onChange={(e) => setMonSlackChannel(e.target.value)} />
               </div>
             )}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Auto Unpause & Run New DAGs</Label>
+              <Switch checked={monAutoUnpause} onCheckedChange={setMonAutoUnpause} />
+            </div>
             <div className="flex items-center justify-between">
               <Label className="text-xs">Auto Retry on Failure</Label>
               <Switch checked={monAutoRetry} onCheckedChange={setMonAutoRetry} />
