@@ -33,6 +33,11 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const [dagType, setDagType] = useState<"error_collection" | "monitor" | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Airflow connection fields (per DAG)
+  const [airflowUrl, setAirflowUrl] = useState("");
+  const [airflowUser, setAirflowUser] = useState("");
+  const [airflowPass, setAirflowPass] = useState("");
+
   // Error Collection fields
   const [ecName, setEcName] = useState("");
   const [ecStorage, setEcStorage] = useState<"file" | "database">("database");
@@ -56,6 +61,9 @@ export function CreateDagDialog({ open, onOpenChange, onCreated }: CreateDagDial
   const resetForm = () => {
     setStep("choose");
     setDagType(null);
+    setAirflowUrl("");
+    setAirflowUser("");
+    setAirflowPass("");
     setEcName("");
     setEcStorage("database");
     setEcFilePath("/opt/airflow/logs/errors.log");
