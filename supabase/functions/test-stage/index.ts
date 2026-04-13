@@ -6,26 +6,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are an expert Airflow QA engineer and Python testing specialist.
+const SYSTEM_PROMPT = `You are an expert Airflow QA engineer and Python 3.13 testing specialist.
 
-Given an Airflow 3.x DAG file (already updated for Python 3.13), run a comprehensive simulated dry-run test suite:
+Given an Airflow 3.x DAG file, run a comprehensive simulated dry-run test suite:
 
-1. **Import Validation**: Check all imports exist in Airflow 3.x and Python 3.13
-2. **Deprecation Check**: Scan for ANY remaining Airflow 2.x deprecated patterns, parameters, or imports
-3. **Python 3.13 Compatibility**: Verify all syntax is Python 3.13 compatible (no removed features)
+1. **Standard Imports Check**: Verify the DAG uses the correct Airflow 3.x import paths:
+   - \`from airflow.sdk import DAG\` (NOT \`from airflow import DAG\`)
+   - \`from airflow.providers.standard.operators.python import PythonOperator\`
+   - \`from airflow.providers.standard.operators.bash import BashOperator\`
+   - \`from airflow.providers.standard.operators.empty import EmptyOperator\` (NOT DummyOperator)
+   - \`from airflow.sdk.bases.decorator import task\` for TaskFlow
+   - \`from __future__ import annotations\` should be present
+2. **Deprecation Check**: Scan for ANY remaining Airflow 2.x deprecated patterns:
+   - \`schedule_interval\` instead of \`schedule\`
+   - \`provide_context=True\`
+   - \`execution_date\` instead of \`logical_date\`
+   - Old import paths like \`airflow.operators.python_operator\`, \`airflow.operators.bash_operator\`
+   - \`DummyOperator\` usage
+   - \`SubDagOperator\` usage
+   - \`task_concurrency\` instead of \`max_active_tis_per_dag\`
+3. **Python 3.13 Compatibility**: Verify modern Python style:
+   - No \`Union[X, Y]\` (should be \`X | Y\`)
+   - No \`Optional[X]\` (should be \`X | None\`)
+   - No \`List[str]\` (should be \`list[str]\`)
+   - f-strings used for formatting
+   - Modern exception handling
 4. **DAG Structure Validation**: Validate DAG definition, task dependencies, scheduling config
-5. **Dry Run Simulation**: Simulate what would happen if the DAG were loaded — would it parse? Would tasks instantiate?
-6. **Type Safety**: Check for type annotation issues
-7. **Best Practices**: Check for common anti-patterns
-
-For each test, provide: test name, status (pass/fail/warning), and details.
+5. **Dry Run Simulation**: Simulate DAG loading — would it parse? Would tasks instantiate?
+6. **Functionality Preservation**: Compare with original to confirm NO business logic was altered
+7. **Best Practices**: Check for anti-patterns
 
 Respond with valid JSON only. No markdown fences:
 {
   "tests": [
     {
       "name": "Test name",
-      "category": "import_validation|deprecation_check|python_compatibility|dag_structure|dry_run|type_safety|best_practices",
+      "category": "standard_imports|deprecation_check|python_compatibility|dag_structure|dry_run|functionality_check|best_practices",
       "status": "pass|fail|warning",
       "details": "What was checked and result",
       "fix_suggestion": "How to fix if failed (null if passed)"
