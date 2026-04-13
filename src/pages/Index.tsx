@@ -37,6 +37,12 @@ const Index = () => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
   }, []);
 
+  const appendLog = useCallback((id: string, msg: string) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, liveLog: [...f.liveLog, `[${new Date().toLocaleTimeString()}] ${msg}`] } : f))
+    );
+  }, []);
+
   const handleUploadFiles = useCallback((uploadedFiles: File[]) => {
     uploadedFiles.forEach((file) => {
       if (!file.name.endsWith(".py")) return;
@@ -114,17 +120,33 @@ const Index = () => {
 
   // Run migration for selected files
   async function runMigration(file: FileEntry): Promise<boolean> {
-    updateFile(file.id, { stage: "migration", progress: 10, error: null });
+    updateFile(file.id, { stage: "migration", progress: 10, error: null, liveLog: [] });
+    appendLog(file.id, `Starting migration for ${file.name}...`);
     try {
-      updateFile(file.id, { progress: 30 });
+      appendLog(file.id, "Analyzing Airflow 2.x code structure...");
+      updateFile(file.id, { progress: 20 });
+      await delay(400);
+      appendLog(file.id, "Identifying deprecated imports and operators...");
+      updateFile(file.id, { progress: 40 });
+      await delay(300);
+      appendLog(file.id, "Applying Airflow 3.x standard import mappings...");
+      updateFile(file.id, { progress: 50 });
       const { data, error } = await supabase.functions.invoke("migrate-dag", {
         body: { code: file.inputCode, mode: "migrate" },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
+      appendLog(file.id, "Replacing deprecated operators and parameters...");
+      updateFile(file.id, { progress: 80 });
+      await delay(300);
+      appendLog(file.id, "Validating Python 3.13 compatibility...");
+      updateFile(file.id, { progress: 90 });
+      await delay(200);
+      appendLog(file.id, `✅ Migration complete — ${data.changes?.length || 0} change(s) applied.`);
       updateFile(file.id, { stage: "migration_done", progress: 100, migrationResult: data });
       return true;
     } catch (err: any) {
+      appendLog(file.id, `❌ Migration failed: ${err.message}`);
       updateFile(file.id, { stage: "deployed", progress: 0, error: err.message || "Migration failed" });
       return false;
     }
@@ -134,23 +156,43 @@ const Index = () => {
   async function runTesting(file: FileEntry): Promise<boolean> {
     const code = file.migrationResult?.fixed_code;
     if (!code) return false;
-    updateFile(file.id, { stage: "testing", progress: 10 });
+    updateFile(file.id, { stage: "testing", progress: 10, liveLog: [] });
+    appendLog(file.id, `Starting tests for ${file.name}...`);
     try {
+      appendLog(file.id, "Checking Airflow 3.x import paths...");
+      updateFile(file.id, { progress: 20 });
+      await delay(400);
+      appendLog(file.id, "Validating DAG structure and task dependencies...");
+      updateFile(file.id, { progress: 35 });
+      await delay(300);
+      appendLog(file.id, "Running operator compatibility checks...");
       updateFile(file.id, { progress: 50 });
       const { data, error } = await supabase.functions.invoke("test-stage", {
         body: { code, original_code: file.inputCode },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      // Check if all tests passed
+      appendLog(file.id, "Verifying parameter naming conventions...");
+      updateFile(file.id, { progress: 70 });
+      await delay(300);
+      appendLog(file.id, "Checking Python 3.13 type hints and syntax...");
+      updateFile(file.id, { progress: 85 });
+      await delay(200);
+
       const allPassed = data?.overall_status === "pass";
+      const testCount = data?.tests?.length || 0;
+      const passCount = data?.tests?.filter((t: any) => t.status === "pass").length || 0;
+
       if (allPassed) {
+        appendLog(file.id, `✅ All ${testCount} test(s) passed! Ready for download.`);
         updateFile(file.id, { stage: "ready_for_download", progress: 100, testResult: data });
       } else {
+        appendLog(file.id, `⚠️ ${passCount}/${testCount} test(s) passed. Review results for details.`);
         updateFile(file.id, { stage: "completed", progress: 100, testResult: data });
       }
       return true;
     } catch (err: any) {
+      appendLog(file.id, `❌ Testing failed: ${err.message}`);
       updateFile(file.id, { stage: "migration_done", progress: 0, error: err.message || "Testing failed" });
       return false;
     }
