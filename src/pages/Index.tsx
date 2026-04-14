@@ -7,8 +7,9 @@ import { PipelineControls } from "@/components/PipelineControls";
 import { CodeDiffViewer } from "@/components/CodeDiffViewer";
 import { LiveStatusPanel } from "@/components/LiveStatusPanel";
 
-import { Upload } from "lucide-react";
+import { Upload, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import type { FileEntry } from "@/types/pipeline";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,6 +34,7 @@ const Index = () => {
   const [selectionMode, setSelectionMode] = useState<"migration" | "testing" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<FileTab>("deployed");
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
 
   const selectedFile = files.find((f) => f.id === selectedFileId) || null;
 
@@ -74,6 +76,7 @@ const Index = () => {
     const file = files.find((f) => f.id === id);
     if (file && file.stage !== "deployed") {
       setSelectedFileId(id);
+      setShowMobilePanel(true);
     }
   }, [files]);
 
@@ -103,7 +106,6 @@ const Index = () => {
   const handleEnterSelectionMode = useCallback((mode: "migration" | "testing") => {
     setSelectionMode(mode);
     setSelectedIds(new Set());
-    // Switch to the relevant tab
     if (mode === "migration") setActiveTab("deployed");
     if (mode === "testing") setActiveTab("migration");
   }, []);
@@ -121,7 +123,6 @@ const Index = () => {
     URL.revokeObjectURL(url);
   }, [files]);
 
-  // Run migration for selected files
   async function runMigration(file: FileEntry): Promise<boolean> {
     updateFile(file.id, { stage: "migration", progress: 10, error: null, liveLog: [] });
     appendLog(file.id, `Starting migration for ${file.name}...`);
@@ -155,7 +156,6 @@ const Index = () => {
     }
   }
 
-  // Run testing for selected files
   async function runTesting(file: FileEntry): Promise<boolean> {
     const code = file.migrationResult?.fixed_code;
     if (!code) return false;
@@ -244,9 +244,16 @@ const Index = () => {
     setSelectionMode(null);
     setSelectedIds(new Set());
     setActiveTab("deployed");
+    setShowMobilePanel(false);
   };
 
   const anyProcessing = files.some((f) => f.stage === "migration" || f.stage === "testing");
+
+  const rightPanel = selectedFile && selectedFile.stage !== "deployed" ? (
+    <CodeDiffViewer file={selectedFile} />
+  ) : anyProcessing ? (
+    <LiveStatusPanel files={files} />
+  ) : null;
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -263,9 +270,12 @@ const Index = () => {
         anyProcessing={anyProcessing}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left: File list with tabs */}
-        <div className="w-72 border-r border-border flex flex-col shrink-0">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left: File list — full width on mobile when no panel is shown */}
+        <div className={`
+          ${showMobilePanel && rightPanel ? 'hidden md:flex' : 'flex'}
+          w-full md:w-72 lg:w-80 border-r border-border flex-col shrink-0 transition-all duration-200
+        `}>
           <FileList
             files={files}
             activeTab={activeTab}
@@ -282,14 +292,28 @@ const Index = () => {
         </div>
 
         {/* Right: Diff viewer, live status, or placeholder */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {selectedFile && selectedFile.stage !== "deployed" ? (
-            <CodeDiffViewer file={selectedFile} />
-          ) : anyProcessing ? (
-            <LiveStatusPanel files={files} />
-          ) : files.length === 0 ? (
+        <div className={`
+          ${showMobilePanel && rightPanel ? 'flex' : 'hidden md:flex'}
+          flex-1 flex-col min-w-0 animate-fade-in
+        `}>
+          {/* Mobile back button */}
+          {showMobilePanel && rightPanel && (
+            <div className="md:hidden px-3 py-2 border-b border-border">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={() => { setShowMobilePanel(false); setSelectedFileId(null); }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to files
+              </Button>
+            </div>
+          )}
+
+          {rightPanel ? rightPanel : files.length === 0 ? (
             <div
-              className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-8 cursor-pointer"
+              className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-6 md:p-8 cursor-pointer"
               onClick={() => {
                 const input = document.createElement("input");
                 input.type = "file";
@@ -308,15 +332,15 @@ const Index = () => {
                 if (droppedFiles.length) handleUploadFiles(droppedFiles);
               }}
             >
-              <div className="border-2 border-dashed border-border rounded-xl p-8 max-w-md hover:border-primary/50 transition-colors">
-                <Upload className="w-12 h-12 text-primary/50 mx-auto mb-4" />
+              <div className="border-2 border-dashed border-border rounded-xl p-6 md:p-8 max-w-md hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 group">
+                <Upload className="w-10 h-10 md:w-12 md:h-12 text-primary/50 mx-auto mb-4 group-hover:text-primary/70 transition-colors group-hover:scale-110 transform duration-300" />
                 <p className="text-sm font-medium text-foreground text-center">Drop .py files here or click to upload</p>
                 <p className="text-xs text-muted-foreground mt-1 text-center">Upload your Airflow 2.x DAG files to deploy to the utility</p>
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground space-y-2">
-              <p className="text-sm">
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground space-y-2 p-4 animate-fade-in">
+              <p className="text-sm text-center">
                 {files.every((f) => f.stage === "ready_for_download")
                   ? "✅ All files ready for download!"
                   : files.every((f) => f.stage === "completed" || f.stage === "ready_for_download")
@@ -327,7 +351,7 @@ const Index = () => {
                   ? "📋 Select migrated files to test, then click 'Test'."
                   : "Click a migrated file to view the side-by-side diff."}
               </p>
-              <p className="text-xs">
+              <p className="text-xs text-center">
                 {files.filter((f) => f.stage === "deployed").length} deployed ·{" "}
                 {files.filter((f) => f.stage === "migration_done").length} migrated ·{" "}
                 {files.filter((f) => f.stage === "completed").length} tested ·{" "}

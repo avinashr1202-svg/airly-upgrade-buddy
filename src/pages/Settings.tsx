@@ -89,9 +89,7 @@ const Settings = () => {
     setTestResults((prev) => ({ ...prev, [endpoint.id]: undefined as any }));
 
     try {
-      // Simple test: just verify the endpoint responds
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      // For built-in Lovable AI, always mark as success
       if (endpoint.id === "lovable-ai") {
         setTestResults((prev) => ({ ...prev, [endpoint.id]: "success" }));
         toast.success("Lovable AI connection verified!");
@@ -113,9 +111,9 @@ const Settings = () => {
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header />
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto p-6 space-y-6">
-          <div>
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
+          <div className="animate-fade-in">
             <h2 className="text-lg font-semibold text-foreground">Settings</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Configure AI endpoints and API keys for use across the utility.
@@ -126,7 +124,7 @@ const Settings = () => {
 
           {/* AI Endpoints */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Server className="w-4 h-4" />
@@ -136,37 +134,39 @@ const Settings = () => {
                   Configure AI model endpoints for error analysis, fix suggestions, and code generation.
                 </p>
               </div>
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={addEndpoint}>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs transition-all active:scale-95" onClick={addEndpoint}>
                 <Plus className="w-3.5 h-3.5" />
                 Add Endpoint
               </Button>
             </div>
 
-            {endpoints.map((ep) => (
-              <Card key={ep.id} className={`p-4 space-y-3 ${ep.isDefault ? "ring-1 ring-primary" : ""}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+            {endpoints.map((ep, idx) => (
+              <Card
+                key={ep.id}
+                className={`p-4 space-y-3 transition-all duration-200 animate-slide-up ${ep.isDefault ? "ring-1 ring-primary" : "hover:border-primary/30"}`}
+                style={{ animationDelay: `${idx * 80}ms`, animationFillMode: 'backwards' }}
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">{ep.name || "New Endpoint"}</span>
-                    {ep.isDefault && (
-                      <Badge className="text-[10px]">Default</Badge>
-                    )}
+                    {ep.isDefault && <Badge className="text-[10px]">Default</Badge>}
                     {ep.id === "lovable-ai" && (
                       <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
                         Built-in
                       </Badge>
                     )}
                     {testResults[ep.id] === "success" && (
-                      <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                      <CheckCircle className="w-3.5 h-3.5 text-green-500 animate-scale-in" />
                     )}
                     {testResults[ep.id] === "failed" && (
-                      <XCircle className="w-3.5 h-3.5 text-red-500" />
+                      <XCircle className="w-3.5 h-3.5 text-red-500 animate-scale-in" />
                     )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="h-7 text-xs gap-1 transition-all active:scale-95"
                       onClick={() => testEndpoint(ep)}
                       disabled={testingId === ep.id}
                     >
@@ -177,7 +177,7 @@ const Settings = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-destructive"
+                        className="h-7 w-7 text-destructive transition-all active:scale-95"
                         onClick={() => removeEndpoint(ep.id)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -186,7 +186,7 @@ const Settings = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Name</Label>
                     <Input
@@ -255,7 +255,7 @@ const Settings = () => {
           </div>
 
           <div className="flex justify-end pt-2 pb-6">
-            <Button className="gap-1.5" onClick={handleSave}>
+            <Button className="gap-1.5 transition-all active:scale-95" onClick={handleSave}>
               <Save className="w-4 h-4" />
               Save Settings
             </Button>

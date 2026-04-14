@@ -36,21 +36,21 @@ export function PipelineControls({
   })();
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 px-3 md:px-4 py-2.5 md:py-3 border-b border-border bg-card/50">
       {/* Stage indicator */}
-      <div className="flex items-center gap-2 flex-1">
+      <div className="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-thin">
         <StageIndicator
           label="Deployment"
           active={currentStage === "deployed"}
           done={files.length > 0}
         />
-        <div className="w-6 h-px bg-border" />
+        <div className="w-4 md:w-6 h-px bg-border shrink-0" />
         <StageIndicator
           label="Migration"
           active={currentStage === "migration"}
           done={hasMigrated || allCompleted}
         />
-        <div className="w-6 h-px bg-border" />
+        <div className="w-4 md:w-6 h-px bg-border shrink-0" />
         <StageIndicator
           label="Testing"
           active={currentStage === "testing"}
@@ -58,13 +58,12 @@ export function PipelineControls({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Migration actions */}
+      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
         {selectionMode === "migration" && (
           <Button
             onClick={onStartMigration}
             disabled={selectedCount === 0 || anyProcessing}
-            className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
+            className="gradient-primary text-primary-foreground font-semibold px-3 md:px-4 glow-primary hover:opacity-90 text-xs transition-all duration-200 active:scale-95"
             size="sm"
           >
             <Play className="w-3.5 h-3.5 mr-1" />
@@ -76,7 +75,7 @@ export function PipelineControls({
           <Button
             onClick={onStartTesting}
             disabled={selectedCount === 0 || anyProcessing}
-            className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
+            className="gradient-primary text-primary-foreground font-semibold px-3 md:px-4 glow-primary hover:opacity-90 text-xs transition-all duration-200 active:scale-95"
             size="sm"
           >
             <Play className="w-3.5 h-3.5 mr-1" />
@@ -87,7 +86,7 @@ export function PipelineControls({
         {!selectionMode && hasDeployed && !anyProcessing && (
           <Button
             onClick={() => onEnterSelectionMode("migration")}
-            className="gradient-primary text-primary-foreground font-semibold px-4 glow-primary hover:opacity-90 text-xs"
+            className="gradient-primary text-primary-foreground font-semibold px-3 md:px-4 glow-primary hover:opacity-90 text-xs transition-all duration-200 active:scale-95"
             size="sm"
           >
             <CheckSquare className="w-3.5 h-3.5 mr-1" />
@@ -100,7 +99,7 @@ export function PipelineControls({
             onClick={() => onEnterSelectionMode("testing")}
             variant="outline"
             size="sm"
-            className="text-xs"
+            className="text-xs transition-all duration-200 active:scale-95"
           >
             <CheckSquare className="w-3.5 h-3.5 mr-1" />
             Select & Test
@@ -114,7 +113,7 @@ export function PipelineControls({
           </Button>
         )}
 
-        <Button variant="outline" size="sm" onClick={onReset} disabled={anyProcessing} className="text-xs text-muted-foreground">
+        <Button variant="outline" size="sm" onClick={onReset} disabled={anyProcessing} className="text-xs text-muted-foreground transition-all duration-200 active:scale-95">
           <RotateCcw className="w-3 h-3 mr-1" />
           Reset
         </Button>
@@ -125,8 +124,8 @@ export function PipelineControls({
 
 function StageIndicator({ label, active, done }: { label: string; active: boolean; done: boolean }) {
   return (
-    <div className={`flex items-center gap-1.5 text-xs font-medium ${active ? "text-primary" : done ? "text-success" : "text-muted-foreground"}`}>
-      <div className={`w-2 h-2 rounded-full ${active ? "bg-primary animate-pulse" : done ? "bg-success" : "bg-muted-foreground/30"}`} />
+    <div className={`flex items-center gap-1.5 text-[10px] md:text-xs font-medium whitespace-nowrap transition-colors duration-300 ${active ? "text-primary" : done ? "text-success" : "text-muted-foreground"}`}>
+      <div className={`w-2 h-2 rounded-full transition-all duration-300 ${active ? "bg-primary animate-pulse shadow-[0_0_6px_hsl(var(--primary)/0.5)]" : done ? "bg-success" : "bg-muted-foreground/30"}`} />
       {label}
     </div>
   );

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, AlertTriangle, Activity, Download, Play, Eye, Trash2, CheckCircle, XCircle, Loader2, Filter } from "lucide-react";
+import { Plus, AlertTriangle, Activity, Download, Play, Eye, Trash2, CheckCircle, XCircle, Loader2, Filter, ArrowLeft } from "lucide-react";
 import { CreateDagDialog } from "@/components/dags/CreateDagDialog";
 import { DagRunsPanel } from "@/components/dags/DagRunsPanel";
 import { DagCodeViewer } from "@/components/dags/DagCodeViewer";
@@ -180,10 +180,8 @@ const Dags = () => {
   };
 
   const filteredTemplates = templates.filter((t) => listFilter === "all" || t.type === listFilter);
-
   const templateRuns = selectedTemplate ? runs.filter((r) => r.template_id === selectedTemplate.id) : [];
 
-  // Hide sensitive fields from config display
   const displayConfig = (config: Record<string, any>) => {
     const entries = Object.entries(config).filter(([key]) => key !== "airflow_connection");
     return entries;
@@ -195,11 +193,14 @@ const Dags = () => {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: DAG templates list */}
-        <div className="w-80 border-r border-border flex flex-col shrink-0">
-          <div className="p-4 border-b border-border space-y-2">
+        <div className={`
+          ${selectedTemplate ? 'hidden md:flex' : 'flex'}
+          w-full md:w-80 lg:w-96 border-r border-border flex-col shrink-0
+        `}>
+          <div className="p-3 md:p-4 border-b border-border space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">DAG Templates</h2>
-              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 text-xs">
+              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 text-xs transition-all duration-200 active:scale-95">
                 <Plus className="w-3.5 h-3.5" />
                 Add DAG
               </Button>
@@ -217,21 +218,23 @@ const Dags = () => {
             </Select>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+          <div className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-thin">
             {filteredTemplates.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm p-4 text-center">
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm p-4 text-center animate-fade-in">
+                <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
                 <p>No DAG templates yet.</p>
                 <p className="text-xs mt-1">Click "Add DAG" to create one.</p>
               </div>
             ) : (
-              filteredTemplates.map((t) => {
+              filteredTemplates.map((t, idx) => {
                 const lastRun = getLastRunStatus(t.id);
                 return (
                   <Card
                     key={t.id}
-                    className={`p-3 cursor-pointer hover:bg-accent/50 transition-colors ${
+                    className={`p-3 cursor-pointer hover:bg-accent/50 transition-all duration-200 animate-slide-up ${
                       selectedTemplate?.id === t.id ? "ring-1 ring-primary bg-accent/30" : ""
                     }`}
+                    style={{ animationDelay: `${idx * 50}ms`, animationFillMode: 'backwards' }}
                     onClick={() => setSelectedTemplate(t)}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -243,7 +246,7 @@ const Dags = () => {
                         )}
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{t.name}</p>
-                          <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <Badge variant="outline" className="text-[10px]">
                               {t.type === "error_collection" ? "Error Collection" : "Monitor"}
                             </Badge>
@@ -283,45 +286,55 @@ const Dags = () => {
         </div>
 
         {/* Right: Details panel */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className={`
+          ${selectedTemplate ? 'flex' : 'hidden md:flex'}
+          flex-1 flex-col min-w-0
+        `}>
           {selectedTemplate ? (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    {selectedTemplate.type === "error_collection" ? (
-                      <AlertTriangle className="w-5 h-5 text-orange-500" />
-                    ) : (
-                      <Activity className="w-5 h-5 text-blue-500" />
-                    )}
-                    {selectedTemplate.name}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {selectedTemplate.type === "error_collection"
-                      ? "Collects and stores Airflow errors"
-                      : "Monitors DAG execution and reports status"}
-                    {" · "}
-                    <span className="text-muted-foreground/70">
-                      Airflow: {(selectedTemplate.config as any)?.airflow_connection?.api_url || "Not configured"}
-                    </span>
-                  </p>
-                </div>
+            <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
+              <div className="p-3 md:p-4 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
+                  {/* Mobile back */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden h-8 w-8 shrink-0"
+                    onClick={() => setSelectedTemplate(null)}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <div>
+                    <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
+                      {selectedTemplate.type === "error_collection" ? (
+                        <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-orange-500" />
+                      ) : (
+                        <Activity className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+                      )}
+                      <span className="truncate">{selectedTemplate.name}</span>
+                    </h3>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">
+                      {selectedTemplate.type === "error_collection"
+                        ? "Collects and stores Airflow errors"
+                        : "Monitors DAG execution and reports status"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap ml-10 md:ml-0">
                   {selectedTemplate.generated_code && (
                     <>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setViewingCode(selectedTemplate)}>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs transition-all active:scale-95" onClick={() => setViewingCode(selectedTemplate)}>
                         <Eye className="w-3.5 h-3.5" />
-                        View Code
+                        <span className="hidden sm:inline">View Code</span>
                       </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownload(selectedTemplate)}>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs transition-all active:scale-95" onClick={() => handleDownload(selectedTemplate)}>
                         <Download className="w-3.5 h-3.5" />
-                        Download
+                        <span className="hidden sm:inline">Download</span>
                       </Button>
                     </>
                   )}
                   <Button
                     size="sm"
-                    className="gap-1.5 text-xs"
+                    className="gap-1.5 text-xs transition-all active:scale-95"
                     onClick={() => handleRunDag(selectedTemplate)}
                     disabled={runningDag === selectedTemplate.id}
                   >
@@ -332,14 +345,14 @@ const Dags = () => {
                     )}
                     Run DAG
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(selectedTemplate.id)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive transition-all active:scale-95" onClick={() => handleDelete(selectedTemplate.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
               <Tabs defaultValue="results" className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="mx-4 mt-2 w-fit">
+                <TabsList className="mx-3 md:mx-4 mt-2 w-fit">
                   <TabsTrigger value="results" className="text-xs">
                     {selectedTemplate.type === "error_collection" ? "Collected Errors" : "Monitor Results"}
                   </TabsTrigger>
@@ -359,14 +372,14 @@ const Dags = () => {
                   <DagRunsPanel runs={templateRuns} templateType={selectedTemplate.type} />
                 </TabsContent>
 
-                <TabsContent value="config" className="mt-0 p-4 space-y-4">
+                <TabsContent value="config" className="mt-0 p-3 md:p-4 space-y-4 overflow-y-auto">
                   {(selectedTemplate.config as any)?.airflow_connection && (
-                    <div>
+                    <div className="animate-slide-up">
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2">AIRFLOW CONNECTION</h4>
-                      <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded border border-border bg-muted/30">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs p-3 rounded border border-border bg-muted/30">
                         <div className="flex gap-2">
                           <span className="text-muted-foreground">API URL:</span>
-                          <span className="font-medium">{(selectedTemplate.config as any).airflow_connection.api_url}</span>
+                          <span className="font-medium break-all">{(selectedTemplate.config as any).airflow_connection.api_url}</span>
                         </div>
                         <div className="flex gap-2">
                           <span className="text-muted-foreground">Username:</span>
@@ -379,13 +392,13 @@ const Dags = () => {
                       </div>
                     </div>
                   )}
-                  <div>
+                  <div className="animate-slide-up" style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}>
                     <h4 className="text-xs font-semibold text-muted-foreground mb-2">DAG CONFIGURATION</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {displayConfig(selectedTemplate.config).map(([key, value]) => (
                         <div key={key} className="flex gap-2">
                           <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}:</span>
-                          <span className="font-medium">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+                          <span className="font-medium break-all">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
                         </div>
                       ))}
                     </div>
@@ -394,9 +407,9 @@ const Dags = () => {
               </Tabs>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground animate-fade-in p-4">
               <Activity className="w-12 h-12 text-primary/30 mb-4" />
-              <p className="text-sm">Select a DAG template or create a new one.</p>
+              <p className="text-sm text-center">Select a DAG template or create a new one.</p>
             </div>
           )}
         </div>
