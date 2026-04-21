@@ -1,4 +1,4 @@
-import { Plane, Zap, BookOpen, Activity, Settings, Menu, X } from "lucide-react";
+import { Plane, Zap, BookOpen, Activity, Settings, Menu, X, GitBranch, Brain, Rocket } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -12,7 +12,10 @@ export function Header() {
 
   const navLinks = [
     { to: "/", label: "Migration", icon: null },
+    { to: "/repositories", label: "Repositories", icon: GitBranch },
+    { to: "/insights", label: "Insights", icon: Brain },
     { to: "/dags", label: "DAGs", icon: Activity },
+    { to: "/deploy", label: "Deploy", icon: Rocket },
     { to: "/settings", label: "Settings", icon: Settings },
   ];
 
