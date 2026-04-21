@@ -232,6 +232,297 @@ export type Database = {
         }
         Relationships: []
       }
+      deployments: {
+        Row: {
+          branch_name: string
+          created_at: string
+          error_message: string | null
+          file_ids: string[]
+          id: string
+          pr_body: string | null
+          pr_number: number | null
+          pr_title: string
+          pr_url: string | null
+          status: string
+          target_path: string
+          target_repository_id: string
+          updated_at: string
+        }
+        Insert: {
+          branch_name: string
+          created_at?: string
+          error_message?: string | null
+          file_ids?: string[]
+          id?: string
+          pr_body?: string | null
+          pr_number?: number | null
+          pr_title: string
+          pr_url?: string | null
+          status?: string
+          target_path: string
+          target_repository_id: string
+          updated_at?: string
+        }
+        Update: {
+          branch_name?: string
+          created_at?: string
+          error_message?: string | null
+          file_ids?: string[]
+          id?: string
+          pr_body?: string | null
+          pr_number?: number | null
+          pr_title?: string
+          pr_url?: string | null
+          status?: string
+          target_path?: string
+          target_repository_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deployments_target_repository_id_fkey"
+            columns: ["target_repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_insights: {
+        Row: {
+          airflow3_ready: boolean | null
+          analysis_notes: string | null
+          created_at: string
+          file_id: string
+          id: string
+          migrated_code: string | null
+          patterns: Json | null
+          python313_ready: boolean | null
+          repository_id: string
+          required_changes: Json | null
+          structure_summary: string | null
+        }
+        Insert: {
+          airflow3_ready?: boolean | null
+          analysis_notes?: string | null
+          created_at?: string
+          file_id: string
+          id?: string
+          migrated_code?: string | null
+          patterns?: Json | null
+          python313_ready?: boolean | null
+          repository_id: string
+          required_changes?: Json | null
+          structure_summary?: string | null
+        }
+        Update: {
+          airflow3_ready?: boolean | null
+          analysis_notes?: string | null
+          created_at?: string
+          file_id?: string
+          id?: string
+          migrated_code?: string | null
+          patterns?: Json | null
+          python313_ready?: boolean | null
+          repository_id?: string
+          required_changes?: Json | null
+          structure_summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_insights_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "ingested_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_insights_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingested_files: {
+        Row: {
+          content: string | null
+          file_name: string
+          file_path: string
+          id: string
+          ingested_at: string
+          kind: string
+          repository_id: string
+          repository_path_id: string | null
+          sha: string | null
+          size_bytes: number | null
+        }
+        Insert: {
+          content?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          ingested_at?: string
+          kind?: string
+          repository_id: string
+          repository_path_id?: string | null
+          sha?: string | null
+          size_bytes?: number | null
+        }
+        Update: {
+          content?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          ingested_at?: string
+          kind?: string
+          repository_id?: string
+          repository_path_id?: string | null
+          sha?: string | null
+          size_bytes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingested_files_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingested_files_repository_path_id_fkey"
+            columns: ["repository_path_id"]
+            isOneToOne: false
+            referencedRelation: "repository_paths"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repo_insights: {
+        Row: {
+          category: string
+          created_at: string
+          detail: string | null
+          examples: Json | null
+          id: string
+          occurrences: number | null
+          repository_id: string | null
+          scope: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          detail?: string | null
+          examples?: Json | null
+          id?: string
+          occurrences?: number | null
+          repository_id?: string | null
+          scope?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          examples?: Json | null
+          id?: string
+          occurrences?: number | null
+          repository_id?: string | null
+          scope?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repo_insights_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repositories: {
+        Row: {
+          created_at: string
+          default_branch: string
+          description: string | null
+          github_owner: string
+          github_repo: string
+          id: string
+          last_ingested_at: string | null
+          lib_path: string | null
+          name: string
+          plugins_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_branch?: string
+          description?: string | null
+          github_owner: string
+          github_repo: string
+          id?: string
+          last_ingested_at?: string | null
+          lib_path?: string | null
+          name: string
+          plugins_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_branch?: string
+          description?: string | null
+          github_owner?: string
+          github_repo?: string
+          id?: string
+          last_ingested_at?: string | null
+          lib_path?: string | null
+          name?: string
+          plugins_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      repository_paths: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          label: string | null
+          path: string
+          repository_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string | null
+          path: string
+          repository_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string | null
+          path?: string
+          repository_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repository_paths_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
