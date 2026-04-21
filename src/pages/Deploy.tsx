@@ -25,7 +25,8 @@ interface Deployment {
   created_at: string; file_ids: string[];
 }
 
-const ROLE_KEY = "airflow_migrator_repo_roles";
+const ROLES_KEY = "airflow_migrator_repo_roles_v2";
+const LEGACY_ROLE_KEY = "airflow_migrator_repo_roles";
 
 const Deploy = () => {
   const [repos, setRepos] = useState<Repo[]>([]);
