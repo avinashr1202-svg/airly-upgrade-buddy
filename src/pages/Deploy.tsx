@@ -33,6 +33,8 @@ const Deploy = () => {
   const [paths, setPaths] = useState<RepoPath[]>([]);
   const [files, setFiles] = useState<IngestedFile[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const [destinationIds, setDestinationIds] = useState<string[]>([]);
   const [sourceId, setSourceId] = useState<string>("");
   const [destinationId, setDestinationId] = useState<string>("");
   const [targetPath, setTargetPath] = useState<string>("");
@@ -43,9 +45,21 @@ const Deploy = () => {
 
   const load = async () => {
     setLoading(true);
-    const roles = JSON.parse(localStorage.getItem(ROLE_KEY) || "{}");
-    setSourceId(roles.sourceId ?? "");
-    setDestinationId(roles.destinationId ?? "");
+    let roles: any = JSON.parse(localStorage.getItem(ROLES_KEY) || "{}");
+    // Backward-compat with old single-source/destination key
+    if (!roles.sourceIds && !roles.destinationIds) {
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_ROLE_KEY) || "{}");
+      roles = {
+        sourceIds: legacy.sourceId ? [legacy.sourceId] : [],
+        destinationIds: legacy.destinationId ? [legacy.destinationId] : [],
+      };
+    }
+    const sIds: string[] = roles.sourceIds ?? [];
+    const dIds: string[] = roles.destinationIds ?? [];
+    setSourceIds(sIds);
+    setDestinationIds(dIds);
+    setSourceId((prev) => prev || sIds[0] || "");
+    setDestinationId((prev) => prev || dIds[0] || "");
 
     const [r, p, f, d] = await Promise.all([
       supabase.from("repositories").select("*"),
@@ -69,19 +83,22 @@ const Deploy = () => {
     [paths, destinationId]
   );
 
-  // Auto-select first destination path when destination changes
+  // Reset target path when destination changes
+  useEffect(() => { setTargetPath(""); }, [destinationId]);
+
+  // Auto-select first destination path
   useEffect(() => {
-    if (destinationPaths.length > 0 && !targetPath) {
-      setTargetPath(destinationPaths[0].path);
-    }
+    if (destinationPaths.length > 0 && !targetPath) setTargetPath(destinationPaths[0].path);
   }, [destinationPaths, targetPath]);
+
+  // Clear file selection when source changes
+  useEffect(() => { setSelected(new Set()); }, [sourceId]);
 
   const toggle = (id: string) => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
   };
-
   const toggleAll = () => {
     if (selected.size === sourceFiles.length) setSelected(new Set());
     else setSelected(new Set(sourceFiles.map(f => f.id)));
@@ -115,12 +132,12 @@ const Deploy = () => {
       load();
     } catch (e: any) {
       toast.error(e.message ?? "Deployment failed");
-    } finally {
-      setDeploying(false);
-    }
+    } finally { setDeploying(false); }
   };
 
-  const notConfigured = !sourceId || !destinationId;
+  const sourceRepos = useMemo(() => sourceIds.map(id => repos.find(r => r.id === id)).filter(Boolean) as Repo[], [sourceIds, repos]);
+  const destinationRepos = useMemo(() => destinationIds.map(id => repos.find(r => r.id === id)).filter(Boolean) as Repo[], [destinationIds, repos]);
+  const notConfigured = sourceRepos.length === 0 || destinationRepos.length === 0;
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -130,7 +147,7 @@ const Deploy = () => {
           <div className="animate-fade-in">
             <h2 className="text-lg font-semibold flex items-center gap-2"><Rocket className="w-4 h-4" /> Deploy</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Files flow from your <span className="text-blue-500 font-medium">source</span> through migration, and PRs are raised on your <span className="text-emerald-500 font-medium">destination</span>.
+              Files flow from a <span className="text-blue-500 font-medium">source</span> through migration, and PRs are raised on a <span className="text-emerald-500 font-medium">destination</span>.
             </p>
           </div>
 
@@ -139,9 +156,9 @@ const Deploy = () => {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold">Source & Destination not configured</p>
+                  <p className="text-sm font-semibold">No sources or destinations configured</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Configure your source repository (where files come from) and destination repository (where PRs are raised) in Settings before deploying.
+                    Add at least one source and one destination repository in Settings before deploying.
                   </p>
                   <Button asChild size="sm" className="mt-3 gap-1.5">
                     <Link to="/settings"><SettingsIcon className="w-3.5 h-3.5" /> Open Settings</Link>
@@ -151,33 +168,39 @@ const Deploy = () => {
             </Card>
           ) : (
             <>
-              {/* Pipeline summary */}
+              {/* Pipeline selectors */}
               <Card className="p-4 animate-fade-in">
-                <div className="grid sm:grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-md bg-blue-500/15 text-blue-500 flex items-center justify-center">
-                      <FolderInput className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Source</p>
-                      <p className="text-sm font-semibold truncate">{sourceRepo?.name ?? "—"}</p>
-                      <p className="text-[11px] font-mono text-muted-foreground truncate">
-                        {sourceRepo?.github_owner}/{sourceRepo?.github_repo}
-                      </p>
-                    </div>
+                <div className="grid sm:grid-cols-[1fr_auto_1fr] items-end gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <FolderInput className="w-3 h-3 text-blue-500" /> Source
+                    </Label>
+                    <Select value={sourceId} onValueChange={setSourceId}>
+                      <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pick a source" /></SelectTrigger>
+                      <SelectContent>
+                        {sourceRepos.map(r => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name} — {r.github_owner}/{r.github_repo} ({r.default_branch})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="text-muted-foreground text-xs hidden sm:block">→ migrate →</div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-md bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
-                      <FolderOutput className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Destination</p>
-                      <p className="text-sm font-semibold truncate">{destinationRepo?.name ?? "—"}</p>
-                      <p className="text-[11px] font-mono text-muted-foreground truncate">
-                        {destinationRepo?.github_owner}/{destinationRepo?.github_repo} · {destinationRepo?.default_branch}
-                      </p>
-                    </div>
+                  <div className="text-muted-foreground text-xs hidden sm:block pb-2">→ migrate →</div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <FolderOutput className="w-3 h-3 text-emerald-500" /> Destination
+                    </Label>
+                    <Select value={destinationId} onValueChange={setDestinationId}>
+                      <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pick a destination" /></SelectTrigger>
+                      <SelectContent>
+                        {destinationRepos.map(r => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name} — {r.github_owner}/{r.github_repo} ({r.default_branch})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </Card>
